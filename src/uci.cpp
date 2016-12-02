@@ -169,6 +169,68 @@ namespace {
     Threads.start_thinking(pos, States, limits);
   }
 
+  void iter(Position& pos, Search::LimitsType limits, Depth depth, vector<string>& fens) {
+
+    limits.startTime = now();
+    StateListPtr states(new std::deque<StateInfo>(1));
+    Position newpos;
+    newpos.set(pos.fen(), Options["UCI_Chess960"], pos.variant(), &states->back(), Threads.main());
+    Threads.start_thinking(newpos, states, limits);
+    Threads.main()->wait_for_search_finished();
+
+    vector<Move> good_moves;
+
+    const Search::RootMoves& rootMoves = pos.this_thread()->rootMoves;
+    size_t PVIdx = pos.this_thread()->PVIdx;
+    size_t multiPV = std::min((size_t)Options["MultiPV"], rootMoves.size());
+
+    Value v0;
+
+    for (size_t i = 0; i < multiPV; ++i)
+    {
+        bool updated = (i <= PVIdx);
+
+        Value v = updated ? rootMoves[i].score : rootMoves[i].previousScore;
+        if (i == 0)
+            v0 = v;
+
+        if (v0 - v < Options["CentipawnRange"] * PawnValueEg / 100)
+            good_moves.push_back(rootMoves[i].pv[0]);
+    }
+
+    for (Move m : good_moves)
+    {
+        StateInfo st;
+        pos.do_move(m, st);
+        if (depth <= ONE_PLY)
+            fens.push_back(pos.fen());
+        else
+            iter(pos, limits, depth - ONE_PLY, fens);
+        pos.undo_move(m);
+    }
+
+  }
+
+  void generate(Position& pos, istringstream& is) {
+
+    Search::LimitsType limits;
+    string token;
+
+    int depth;
+    is >> depth;
+
+    while (is >> token)
+        if (token == "depth")          is >> limits.depth;
+        else if (token == "nodes")     is >> limits.nodes;
+        else if (token == "movetime")  is >> limits.movetime;
+
+    vector<string> fens;
+    iter(pos, limits, (Depth)depth, fens);
+
+    for (size_t i = 0; i < fens.size(); ++i)
+        sync_cout << fens[i] + ";" << sync_endl;
+  }
+
 } // namespace
 
 
@@ -225,6 +287,7 @@ void UCI::loop(int argc, char* argv[]) {
       }
       else if (token == "isready")    sync_cout << "readyok" << sync_endl;
       else if (token == "go")         go(pos, is);
+      else if (token == "generate")   generate(pos, is);
       else if (token == "position")   position(pos, is);
       else if (token == "setoption")  setoption(is);
 
