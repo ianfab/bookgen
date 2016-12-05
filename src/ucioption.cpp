@@ -59,6 +59,7 @@ void init(OptionsMap& o) {
 
   o["Debug Log File"]        << Option("", on_logger);
   o["CentipawnRange"]        << Option(30, 0, 200);
+  o["DepthFactor"]           << Option(100, 0, 200);
   o["Contempt"]              << Option(0, -100, 100);
   o["Threads"]               << Option(1, 1, 128, on_threads);
   o["Hash"]                  << Option(16, 1, MaxHashMB, on_hash_size);

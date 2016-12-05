@@ -169,7 +169,7 @@ namespace {
     Threads.start_thinking(pos, States, limits);
   }
 
-  void iter(Position& pos, Search::LimitsType limits, Depth depth, vector<string>& fens) {
+  void iter(Position& pos, Search::LimitsType limits, Depth depth, vector<string>& fens, Value range) {
 
     limits.startTime = now();
     StateListPtr states(new std::deque<StateInfo>(1));
@@ -194,7 +194,7 @@ namespace {
         if (i == 0)
             v0 = v;
 
-        if (v0 - v < Options["CentipawnRange"] * PawnValueEg / 100)
+        if (v0 - v < range)
             good_moves.push_back(rootMoves[i].pv[0]);
     }
 
@@ -205,7 +205,7 @@ namespace {
         if (depth <= ONE_PLY)
             fens.push_back(pos.fen());
         else
-            iter(pos, limits, depth - ONE_PLY, fens);
+            iter(pos, limits, depth - ONE_PLY, fens, range * Options["DepthFactor"] / 100);
         pos.undo_move(m);
     }
 
@@ -225,7 +225,7 @@ namespace {
         else if (token == "movetime")  is >> limits.movetime;
 
     vector<string> fens;
-    iter(pos, limits, (Depth)depth, fens);
+    iter(pos, limits, (Depth)depth, fens, Options["CentipawnRange"] * PawnValueEg / 100);
 
     for (size_t i = 0; i < fens.size(); ++i)
         sync_cout << fens[i] + ";" << sync_endl;
