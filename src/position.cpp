@@ -267,7 +267,13 @@ Position& Position::set(const string& fenStr, bool isChess960, Variant v, StateI
           sq += Square(token - '0'); // Advance the given number of files
 
       else if (token == '/')
+      {
+#ifdef CRAZYHOUSE
+          if (is_house() && sq < Square(16))
+              break;
+#endif
           sq -= Square(16);
+      }
 
       else if ((idx = PieceToChar.find(token)) != string::npos)
       {
@@ -374,36 +380,35 @@ Position& Position::set(const string& fenStr, bool isChess960, Variant v, StateI
       st->epSquare = SQ_NONE;
 
 #ifdef THREECHECK
-    st->checksGiven[WHITE] = CHECKS_0;
-    st->checksGiven[BLACK] = CHECKS_0;
-    if (is_three_check())
-    {
-        // 7. Checks given counter for Three-Check positions
-        if ((ss >> std::skipws >> token))
-        {
-            switch('3' - token)
-            {
-            case 0: st->checksGiven[WHITE] = CHECKS_0; break;
-            case 1: st->checksGiven[WHITE] = CHECKS_1; break;
-            case 2: st->checksGiven[WHITE] = CHECKS_2; break;
-            case 3: st->checksGiven[WHITE] = CHECKS_3; break;
-            default: st->checksGiven[WHITE] = CHECKS_NB;
-            }
-            ss >> token >> token;
-            switch('3' - token)
-            {
-            case 0: st->checksGiven[BLACK] = CHECKS_0; break;
-            case 1: st->checksGiven[BLACK] = CHECKS_1; break;
-            case 2: st->checksGiven[BLACK] = CHECKS_2; break;
-            case 3: st->checksGiven[BLACK] = CHECKS_3; break;
-            default : st->checksGiven[BLACK] = CHECKS_NB;
-            }
-        }
-    }
+  // Remaining checks counter for Three-Check positions
+  st->checksGiven[WHITE] = CHECKS_0;
+  st->checksGiven[BLACK] = CHECKS_0;
+
+  ss >> std::skipws >> token;
+
+  if (is_three_check() && ss.peek() == '+')
+  {
+      st->checksGiven[WHITE] = CheckCount(std::max(std::min('3' - token, 3), 0));
+      ss >> token >> token;
+      st->checksGiven[BLACK] = CheckCount(std::max(std::min('3' - token, 3), 0));
+  }
+  else
+      ss.putback(token);
 #endif
 
   // 5-6. Halfmove clock and fullmove number
   ss >> std::skipws >> st->rule50 >> gamePly;
+
+#ifdef THREECHECK
+  // Checks given in Three-Check positions
+  if (is_three_check() && (ss >> token) && token == '+')
+  {
+      ss >> token;
+      st->checksGiven[WHITE] = CheckCount(std::max(std::min(token - '0', 3), 0));
+      ss >> token >> token;
+      st->checksGiven[BLACK] = CheckCount(std::max(std::min(token - '0', 3), 0));
+  }
+#endif
 
   // Convert from fullmove starting from 1 to ply starting from 0,
   // handle also common incorrect FEN with fullmove = 0.
@@ -597,24 +602,23 @@ void Position::set_state(StateInfo* si) const {
 
 
 /// Position::set() is an overload to initialize the position object with
-/// the given endgame code string like "KBPKN". It is manily an helper to
+/// the given endgame code string like "KBPvKN". It is mainly an helper to
 /// get the material key out of an endgame code. Position is not playable,
 /// indeed is even not guaranteed to be legal.
 
-Position& Position::set(const string& code, Color c, StateInfo* si) {
+Position& Position::set(const string& code, Color c, Variant v, StateInfo* si) {
 
-  assert(code.length() > 0 && code.length() < 8);
-  assert(code[0] == 'K');
+  assert(code.length() > 0 && code.length() < 9);
 
-  string sides[] = { code.substr(code.find('K', 1)),      // Weak
-                     code.substr(0, code.find('K', 1)) }; // Strong
+  string sides[] = { code.substr(code.find('v') + 1),  // Weak
+                     code.substr(0, code.find('v')) }; // Strong
 
   std::transform(sides[c].begin(), sides[c].end(), sides[c].begin(), tolower);
 
   string fenStr =  sides[0] + char(8 - sides[0].length() + '0') + "/8/8/8/8/8/8/"
                  + sides[1] + char(8 - sides[1].length() + '0') + " w - - 0 10";
 
-  return set(fenStr, false, CHESS_VARIANT, si, nullptr);
+  return set(fenStr, false, v, si, nullptr);
 }
 
 
@@ -1877,9 +1881,9 @@ bool Position::is_draw() const {
       return true;
 
 #ifdef CRAZYHOUSE
-  int e = is_house() ? st->pliesFromNull : std::min(st->rule50, st->pliesFromNull);
+  int rep = 1, e = is_house() ? st->pliesFromNull : std::min(st->rule50, st->pliesFromNull);
 #else
-  int e = std::min(st->rule50, st->pliesFromNull);
+  int rep = 1, e = std::min(st->rule50, st->pliesFromNull);
 #endif
 
   if (e < 4)
@@ -1890,8 +1894,8 @@ bool Position::is_draw() const {
   do {
       stp = stp->previous->previous;
 
-      if (stp->key == st->key)
-          return true; // Draw at first repetition
+      if (stp->key == st->key && (++rep >= 2 + (gamePly - e < thisThread->rootPly)))
+          return true; // Draw at first repetition in search, and second repetition in game tree.
 
   } while ((e -= 2) >= 4);
 
