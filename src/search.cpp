@@ -81,6 +81,9 @@ namespace {
 #ifdef KOTH
   { 483, 570, 603, 554 },
 #endif
+#ifdef LOSERS
+  { 1932, 2280, 2412, 2216 },
+#endif
 #ifdef RACE
   { 1017, 986, 1017, 990 },
 #endif
@@ -107,6 +110,9 @@ namespace {
 #endif
 #ifdef KOTH
   150,
+#endif
+#ifdef LOSERS
+  600,
 #endif
 #ifdef RACE
   365,
@@ -218,7 +224,7 @@ namespace {
   Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool cutNode, bool skipEarlyPruning);
 
   template <NodeType NT, bool InCheck>
-  Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth);
+  Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth = DEPTH_ZERO);
 
   Value value_to_tt(Value v, int ply);
   Value value_from_tt(Value v, int ply);
@@ -324,6 +330,10 @@ void MainThread::search() {
       if (rootPos.is_koth() && rootPos.is_koth_loss())
           score = -VALUE_MATE;
 #endif
+#ifdef LOSERS
+      if (rootPos.is_losers())
+          score = rootPos.is_losers_loss() ? -VALUE_MATE : VALUE_MATE;
+#endif
 #ifdef RACE
       if (rootPos.is_race())
           score =  rootPos.is_race_draw() ? VALUE_DRAW
@@ -378,6 +388,12 @@ void MainThread::search() {
 
   // Check if there are threads with a better score than main thread
   Thread* bestThread = this;
+#ifdef USELONGESTPV
+  Thread* longestPVThread = this;
+  const int minPlies = 6;
+  const int maxScoreDiff = 20;
+  const int maxDepthDiff = 2;
+#endif
   if (   !this->easyMovePlayed
       &&  Options["MultiPV"] == 1
       && !Limits.depth
@@ -387,7 +403,53 @@ void MainThread::search() {
       for (Thread* th : Threads)
           if (   th->completedDepth > bestThread->completedDepth
               && th->rootMoves[0].score > bestThread->rootMoves[0].score)
+#ifdef USELONGESTPV
+              longestPVThread = bestThread = th;
+#else
               bestThread = th;
+#endif
+
+#ifdef USELONGESTPV
+      if (bestThread->rootMoves[0].pv.size() < minPlies) {
+          for (Thread* th : Threads) {
+              // Look for the best thread that meets the minimum move criteria.
+              // Don't take a thread unless it's within the appropriate
+              // range of score eval.
+              if (th->rootMoves[0].pv.size() <= bestThread->rootMoves[0].pv.size()) {
+                  continue;
+              }
+              auto begin = bestThread->rootMoves[0].pv.begin();
+              auto end = bestThread->rootMoves[0].pv.end();
+              auto pair = std::mismatch(begin, end, th->rootMoves[0].pv.begin());
+              if (pair.first != end)
+                  continue;
+
+              if (longestPVThread->rootMoves[0].pv.size() < minPlies)
+              {
+                  // If our current longest is not long enough, allow
+                  // a weakening of score and depth to an absolute max of
+                  // maxScoreDiff and maxDepthDiff compared to the bestThread.
+                  if (   th->rootMoves[0].pv.size() >= longestPVThread->rootMoves[0].pv.size()
+                      && abs(bestThread->rootMoves[0].score - th->rootMoves[0].score) < maxScoreDiff
+                      && (bestThread->completedDepth - th->completedDepth < maxDepthDiff))
+                      longestPVThread = th;
+              }
+              else
+              {
+                  // Once our longestPVThread is long enough, we will take
+                  // any thread that is ALSO long enough but has a stronger
+                  // eval/depth
+                  if (
+                          th->rootMoves[0].pv.size() >= minPlies
+                      && abs(bestThread->rootMoves[0].score - th->rootMoves[0].score) < maxScoreDiff
+                      && (   th->rootMoves[0].score >= longestPVThread->rootMoves[0].score
+                          || th->completedDepth >= longestPVThread->completedDepth)
+                     )
+                      longestPVThread = th;
+              }
+          }
+      }
+#endif
   }
 
   previousScore = bestThread->rootMoves[0].score;
@@ -395,6 +457,12 @@ void MainThread::search() {
   // Send new PV when needed
   if (bestThread != this)
       sync_cout << UCI::pv(bestThread->rootPos, bestThread->completedDepth, -VALUE_INFINITE, VALUE_INFINITE) << sync_endl;
+
+#ifdef USELONGESTPV
+  // Send longer PV when needed
+  if (longestPVThread != bestThread)
+      sync_cout << UCI::pv(longestPVThread->rootPos, longestPVThread->completedDepth, -VALUE_INFINITE, VALUE_INFINITE) << sync_endl;
+#endif
 
   // Best move could be MOVE_NONE when searching on a terminal position
   sync_cout << "bestmove " << UCI::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
@@ -680,6 +748,16 @@ namespace {
                 return mated_in(ss->ply);
         }
 #endif
+#ifdef LOSERS
+        // Check for an instant win/loss (Losers)
+        if (pos.is_losers())
+        {
+            if (pos.is_losers_win())
+                return mate_in(ss->ply + 1);
+            if (pos.is_losers_loss())
+                return mated_in(ss->ply);
+        }
+#endif
 #ifdef RACE
         // Check for an instant win/loss (Racing Kings)
         if (pos.is_race())
@@ -782,6 +860,9 @@ namespace {
 #ifdef KOTH
     if (pos.is_koth()) {} else
 #endif
+#ifdef LOSERS
+    if (pos.is_losers()) {} else
+#endif
 #ifdef RACE
     if (pos.is_race()) {} else
 #endif
@@ -791,21 +872,15 @@ namespace {
 #ifdef HORDE
     if (pos.is_horde()) {} else
 #endif
-#ifdef ATOMIC
-    if (pos.is_atomic()) {} else
-#endif
-#ifdef ANTI
-    if (pos.is_anti()) {} else
-#endif
 #ifdef CRAZYHOUSE
     if (pos.is_house()) {} else
 #endif
     if (!rootNode && TB::Cardinality)
     {
-        int piecesCnt = pos.count<ALL_PIECES>(WHITE) + pos.count<ALL_PIECES>(BLACK);
+        int piecesCount = pos.count<ALL_PIECES>(WHITE) + pos.count<ALL_PIECES>(BLACK);
 
-        if (    piecesCnt <= TB::Cardinality
-            && (piecesCnt <  TB::Cardinality || depth >= TB::ProbeDepth)
+        if (    piecesCount <= TB::Cardinality
+            && (piecesCount <  TB::Cardinality || depth >= TB::ProbeDepth)
             &&  pos.rule50_count() == 0
             && !pos.can_castle(ANY_CASTLING))
         {
@@ -873,10 +948,10 @@ namespace {
         &&  eval + razor_margin[pos.variant()][depth / ONE_PLY] <= alpha)
     {
         if (depth <= ONE_PLY)
-            return qsearch<NonPV, false>(pos, ss, alpha, beta, DEPTH_ZERO);
+            return qsearch<NonPV, false>(pos, ss, alpha, alpha+1);
 
         Value ralpha = alpha - razor_margin[pos.variant()][depth / ONE_PLY];
-        Value v = qsearch<NonPV, false>(pos, ss, ralpha, ralpha+1, DEPTH_ZERO);
+        Value v = qsearch<NonPV, false>(pos, ss, ralpha, ralpha+1);
         if (v <= ralpha)
             return v;
     }
@@ -886,7 +961,11 @@ namespace {
         &&  depth < 7 * ONE_PLY
         &&  eval - futility_margin(pos.variant(), depth) >= beta
         &&  eval < VALUE_KNOWN_WIN  // Do not return unproven wins
+#ifdef HORDE
+        &&  (pos.non_pawn_material(pos.side_to_move()) || pos.is_horde()))
+#else
         &&  pos.non_pawn_material(pos.side_to_move()))
+#endif
         return eval;
 
     // Step 8. Null move search with verification search (is omitted in PV nodes)
@@ -907,7 +986,7 @@ namespace {
         Depth R = ((823 + 67 * depth / ONE_PLY) / 256 + std::min((eval - beta) / PawnValueMg, 3)) * ONE_PLY;
 
         pos.do_null_move(st);
-        nullValue = depth-R < ONE_PLY ? -qsearch<NonPV, false>(pos, ss+1, -beta, -beta+1, DEPTH_ZERO)
+        nullValue = depth-R < ONE_PLY ? -qsearch<NonPV, false>(pos, ss+1, -beta, -beta+1)
                                       : - search<NonPV>(pos, ss+1, -beta, -beta+1, depth-R, !cutNode, true);
         pos.undo_null_move();
 
@@ -921,7 +1000,7 @@ namespace {
                 return nullValue;
 
             // Do verification search at high depths
-            Value v = depth-R < ONE_PLY ? qsearch<NonPV, false>(pos, ss, beta-1, beta, DEPTH_ZERO)
+            Value v = depth-R < ONE_PLY ? qsearch<NonPV, false>(pos, ss, beta-1, beta)
                                         :  search<NonPV>(pos, ss, beta-1, beta, depth-R, false, true);
 
             if (v >= beta)
@@ -1107,16 +1186,10 @@ moves_loop: // When in check search starts from here
                   && !pos.see_ge(move, Value(-35 * lmrDepth * lmrDepth)))
                   continue;
           }
-          else if (depth < 7 * ONE_PLY && !extension)
-          {
-              Value v = -Value(399 + 35 * depth / ONE_PLY * depth / ONE_PLY);
-
-              if (PvNode)
-                  v += beta - alpha - 1;
-
-              if (!pos.see_ge(move, v))
+          else if (    depth < 7 * ONE_PLY
+                   && !extension
+                   && !pos.see_ge(move, -PawnValueEg * (depth / ONE_PLY)))
                   continue;
-          }
       }
 
       // Speculative prefetch as early as possible
@@ -1188,8 +1261,8 @@ moves_loop: // When in check search starts from here
       // Step 16. Full depth search when LMR is skipped or fails high
       if (doFullDepthSearch)
           value = newDepth <   ONE_PLY ?
-                            givesCheck ? -qsearch<NonPV,  true>(pos, ss+1, -(alpha+1), -alpha, DEPTH_ZERO)
-                                       : -qsearch<NonPV, false>(pos, ss+1, -(alpha+1), -alpha, DEPTH_ZERO)
+                            givesCheck ? -qsearch<NonPV,  true>(pos, ss+1, -(alpha+1), -alpha)
+                                       : -qsearch<NonPV, false>(pos, ss+1, -(alpha+1), -alpha)
                                        : - search<NonPV>(pos, ss+1, -(alpha+1), -alpha, newDepth, !cutNode, false);
 
       // For PV nodes only, do a full PV search on the first move or after a fail
@@ -1201,8 +1274,8 @@ moves_loop: // When in check search starts from here
           (ss+1)->pv[0] = MOVE_NONE;
 
           value = newDepth <   ONE_PLY ?
-                            givesCheck ? -qsearch<PV,  true>(pos, ss+1, -beta, -alpha, DEPTH_ZERO)
-                                       : -qsearch<PV, false>(pos, ss+1, -beta, -alpha, DEPTH_ZERO)
+                            givesCheck ? -qsearch<PV,  true>(pos, ss+1, -beta, -alpha)
+                                       : -qsearch<PV, false>(pos, ss+1, -beta, -alpha)
                                        : - search<PV>(pos, ss+1, -beta, -alpha, newDepth, false, false);
       }
 
@@ -1308,9 +1381,18 @@ moves_loop: // When in check search starts from here
             bestValue = excludedMove ? alpha : mated_in(ss->ply);
         else
 #endif
+#ifdef LOSERS
+        if (pos.is_losers() && pos.is_losers_loss())
+            bestValue = excludedMove ? alpha : mate_in(ss->ply+1);
+        else
+#endif
 #ifdef ANTI
         if (pos.is_anti())
-            bestValue = excludedMove ? alpha : mate_in(ss->ply+1);
+            bestValue = excludedMove ? alpha
+#ifdef SUICIDE
+            : pos.is_suicide() ? pos.suicide_stalemate(ss->ply, DrawValue[pos.side_to_move()])
+#endif
+            : mate_in(ss->ply+1);
         else
 #endif
         bestValue = excludedMove ? alpha
@@ -1345,8 +1427,7 @@ moves_loop: // When in check search starts from here
 
 
   // qsearch() is the quiescence search function, which is called by the main
-  // search function when the remaining depth is zero (or, to be more precise,
-  // less than ONE_PLY).
+  // search function with depth zero, or recursively with depth less than ONE_PLY.
 
   template <NodeType NT, bool InCheck>
   Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth) {
@@ -1389,6 +1470,16 @@ moves_loop: // When in check search starts from here
         if (pos.is_koth_win())
             return mate_in(ss->ply+1);
         if (pos.is_koth_loss())
+            return mated_in(ss->ply);
+    }
+#endif
+#ifdef LOSERS
+    // Check for an instant win or loss (Losers)
+    if (pos.is_losers())
+    {
+        if (pos.is_losers_win())
+            return mate_in(ss->ply+1);
+        if (pos.is_losers_loss())
             return mated_in(ss->ply);
     }
 #endif
@@ -1544,6 +1635,16 @@ moves_loop: // When in check search starts from here
       {
           assert(type_of(move) != ENPASSANT); // Due to !pos.advanced_pawn_push
 
+#ifdef ATOMIC
+          if (pos.is_atomic())
+              futilityValue = futilityBase + pos.see<ATOMIC_VARIANT>(move);
+          else
+#endif
+#ifdef CRAZYHOUSE
+          if (pos.is_house())
+              futilityValue = futilityBase + 2 * PieceValue[pos.variant()][EG][pos.piece_on(to_sq(move))];
+          else
+#endif
           futilityValue = futilityBase + PieceValue[pos.variant()][EG][pos.piece_on(to_sq(move))];
 
           if (futilityValue <= alpha)
