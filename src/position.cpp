@@ -2,7 +2,7 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
   Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
-  Copyright (C) 2015-2016 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
+  Copyright (C) 2015-2017 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -151,7 +151,7 @@ std::ostream& operator<<(std::ostream& os, const Position& pos) {
   {
       StateInfo st;
       Position p;
-      p.set(pos.fen(), pos.is_chess960(), pos.variant(), &st, pos.this_thread());
+      p.set(pos.fen(), pos.is_chess960(), pos.subvariant(), &st, pos.this_thread());
       Tablebases::ProbeState s1, s2;
       Tablebases::WDLScore wdl = Tablebases::probe_wdl(p, &s1);
       int dtz = Tablebases::probe_dtz(p, &s2);
@@ -196,7 +196,7 @@ void Position::init() {
 
 #ifdef THREECHECK
   for (Color c = WHITE; c <= BLACK; ++c)
-      for (CheckCount n : Checks)
+      for (CheckCount n : CheckCounts)
           Zobrist::checks[c][n] = rng.rand<Key>();
 #endif
 #ifdef CRAZYHOUSE
@@ -257,24 +257,7 @@ Position& Position::set(const string& fenStr, bool isChess960, Variant v, StateI
   std::fill_n(&pieceList[0][0], sizeof(pieceList) / sizeof(Square), SQ_NONE);
   st = si;
   subvar = v;
-  if (v < VARIANT_NB)
-      var = v;
-  else
-      switch(v)
-      {
-#ifdef SUICIDE
-      case SUICIDE_VARIANT:
-          var = ANTI_VARIANT;
-          break;
-#endif
-#ifdef LOOP
-      case LOOP_VARIANT:
-          var = CRAZYHOUSE_VARIANT;
-          break;
-#endif
-      default:
-          assert(false);
-      }
+  var = main_variant(v);
 
   ss >> std::noskipws;
 
@@ -538,8 +521,7 @@ void Position::set_check_info(StateInfo* si) const {
 
 void Position::set_state(StateInfo* si) const {
 
-  si->key = si->materialKey = 0;
-  si->key ^= Zobrist::variant[var];
+  si->key = si->materialKey = Zobrist::variant[var];
   si->pawnKey = Zobrist::noPawns;
   si->nonPawnMaterial[WHITE] = si->nonPawnMaterial[BLACK] = VALUE_ZERO;
   si->psq = SCORE_ZERO;
@@ -583,7 +565,7 @@ void Position::set_state(StateInfo* si) const {
   if (is_house())
   {
       for (Piece pc : Pieces)
-          si->psq += pieceCountInHand[color_of(pc)][type_of(pc)] * PSQT::psq[var][pc][SQ_NONE];
+          si->psq += PSQT::psq[var][pc][SQ_NONE] * pieceCountInHand[color_of(pc)][type_of(pc)];
   }
 #endif
 
@@ -730,12 +712,12 @@ Phase Position::game_phase() const {
   Value npm = st->nonPawnMaterial[WHITE] + st->nonPawnMaterial[BLACK];
 #ifdef HORDE
   if (is_horde())
-      npm = 2 * st->nonPawnMaterial[is_horde_color(WHITE) ? BLACK : WHITE];
+      return Phase(count<PAWN>(is_horde_color(WHITE) ? WHITE : BLACK) * PHASE_MIDGAME / 36);
 #endif
 
-  npm = std::max(EndgameLimit, std::min(npm, MidgameLimit));
+  npm = std::max(PhaseLimit[variant()][EG], std::min(npm, PhaseLimit[variant()][MG]));
 
-  return Phase(((npm - EndgameLimit) * PHASE_MIDGAME) / (MidgameLimit - EndgameLimit));
+  return Phase(((npm - PhaseLimit[variant()][EG]) * PHASE_MIDGAME) / (PhaseLimit[variant()][MG] - PhaseLimit[variant()][EG]));
 }
 
 
@@ -919,37 +901,14 @@ bool Position::pseudo_legal(const Move m) const {
   Square to = to_sq(m);
   Piece pc = moved_piece(m);
 
-#ifdef KOTH
   // If the game is already won or lost, further moves are illegal
-  if (is_koth() && (is_koth_win() || is_koth_loss()))
+  if (is_variant_end())
       return false;
-#endif
-#ifdef LOSERS
-  // If the game is already won or lost, further moves are illegal
-  if (is_losers() && (is_losers_win() || is_losers_loss()))
-      return false;
-#endif
-#ifdef RACE
-  // If the game is already won or lost, further moves are illegal
-  if (is_race() && (is_race_draw() || is_race_win() || is_race_loss()))
-      return false;
-#endif
-#ifdef HORDE
-  // If the game is already won or lost, further moves are illegal
-  if (is_horde() && is_horde_loss())
-      return false;
-#endif
-#ifdef ANTI
-  // If the game is already won or lost, further moves are illegal
-  if (is_anti() && (is_anti_win() || is_anti_loss()))
-      return false;
-#endif
+
 #ifdef ATOMIC
   if (is_atomic())
   {
       // If the game is already won or lost, further moves are illegal
-      if (is_atomic_win() || is_atomic_loss())
-          return false;
       if (pc == NO_PIECE || color_of(pc) != us)
           return false;
       if (capture(m))
@@ -1269,11 +1228,16 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       if (is_house())
       {
           st->capturedpromoted = is_promoted(to);
-          Piece add = is_promoted(to) ? make_piece(~color_of(captured), PAWN) : ~captured;
-          add_to_hand(color_of(add), type_of(add));
-          st->psq += PSQT::psq[var][add][SQ_NONE];
-          k ^= Zobrist::inHand[add][pieceCountInHand[color_of(add)][type_of(add)] - 1]
-              ^ Zobrist::inHand[add][pieceCountInHand[color_of(add)][type_of(add)]];
+#ifdef BUGHOUSE
+          if (! is_bughouse())
+#endif
+          {
+              Piece add = is_promoted(to) ? make_piece(~color_of(captured), PAWN) : ~captured;
+              add_to_hand(color_of(add), type_of(add));
+              st->psq += PSQT::psq[var][add][SQ_NONE];
+              k ^= Zobrist::inHand[add][pieceCountInHand[color_of(add)][type_of(add)] - 1]
+                  ^ Zobrist::inHand[add][pieceCountInHand[color_of(add)][type_of(add)]];
+          }
           promotedPieces -= to;
       }
 #endif
@@ -1335,8 +1299,8 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
 #ifdef CRAZYHOUSE
   if (type_of(m) == DROP)
   {
-      k ^= Zobrist::psq[pc][to] ^ Zobrist::inHand[pc][pieceCountInHand[color_of(pc)][type_of(pc)]]
-          ^ Zobrist::inHand[pc][pieceCountInHand[color_of(pc)][type_of(pc)] + 1];
+      k ^= Zobrist::psq[pc][to] ^ Zobrist::inHand[pc][pieceCountInHand[color_of(pc)][type_of(pc)] - 1]
+          ^ Zobrist::inHand[pc][pieceCountInHand[color_of(pc)][type_of(pc)]];
       if (type_of(pc) != PAWN)
           st->nonPawnMaterial[us] += PieceValue[CHESS_VARIANT][MG][type_of(pc)];
   }
@@ -1624,6 +1588,9 @@ void Position::undo_move(Move m) {
 #ifdef CRAZYHOUSE
           if (is_house())
           {
+#ifdef BUGHOUSE
+              if (! is_bughouse())
+#endif
               remove_from_hand(~color_of(st->capturedPiece), st->capturedpromoted ? PAWN : type_of(st->capturedPiece));
               if (st->capturedpromoted)
                   promotedPieces |= to;
@@ -1778,6 +1745,10 @@ Value Position::see<ATOMIC_VARIANT>(Move m) const {
 bool Position::see_ge(Move m, Value v) const {
 
   assert(is_ok(m));
+#ifdef CRAZYHOUSE
+  if (is_house())
+      v /= 2;
+#endif
 
 #ifdef THREECHECK
   if (is_three_check() && gives_check(m))
@@ -1923,29 +1894,34 @@ bool Position::see_ge(Move m, Value v) const {
 /// Position::is_draw() tests whether the position is drawn by 50-move rule
 /// or by repetition. It does not detect stalemates.
 
-bool Position::is_draw() const {
+bool Position::is_draw(int ply) const {
 
   if (st->rule50 > 99 && (!checkers() || MoveList<LEGAL>(*this).size()))
       return true;
 
 #ifdef CRAZYHOUSE
-  int rep = 1, e = is_house() ? st->pliesFromNull : std::min(st->rule50, st->pliesFromNull);
+  int end = is_house() ? st->pliesFromNull : std::min(st->rule50, st->pliesFromNull);
 #else
-  int rep = 1, e = std::min(st->rule50, st->pliesFromNull);
+  int end = std::min(st->rule50, st->pliesFromNull);
 #endif
 
-  if (e < 4)
+  if (end < 4)
     return false;
 
   StateInfo* stp = st->previous->previous;
+  int cnt = 0;
 
-  do {
+  for (int i = 4; i <= end; i += 2)
+  {
       stp = stp->previous->previous;
 
-      if (stp->key == st->key && (++rep >= 2 + (gamePly - e < thisThread->rootPly)))
-          return true; // Draw at first repetition in search, and second repetition in game tree.
-
-  } while ((e -= 2) >= 4);
+      // At root position ply is 1, so return a draw score if a position
+      // repeats once earlier but after or at the root, or repeats twice
+      // strictly before the root.
+      if (   stp->key == st->key
+          && ++cnt + (ply - i > 0) == 2)
+          return true;
+  }
 
   return false;
 }

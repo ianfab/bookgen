@@ -2,7 +2,7 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
   Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
-  Copyright (C) 2015-2016 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
+  Copyright (C) 2015-2017 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@ using namespace std;
 
 namespace {
 
-const vector<string> Defaults[VARIANT_NB] = {
+const vector<string> Defaults[SUBVARIANT_NB] = {
   {
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
     "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 10",
@@ -88,7 +88,34 @@ const vector<string> Defaults[VARIANT_NB] = {
   },
 #ifdef ANTI
   {
-    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "rn1qkbnr/p1pBpppp/8/8/8/4P3/PPPP1PbP/RNBQK1NR w - - 0 4",
+    "rnbqkbnr/p2p1ppp/8/2p1p3/2pP4/2N3P1/PP2PP1P/R1BQKBNR b - d3 0 5",
+    "rnb1kbn1/p4ppr/8/3q4/1p6/6PB/P3PP1P/R1B1K1NR b - - 1 11",
+    "r7/4rp1p/4p3/p1p5/P1P1P2P/8/2K1NPP1/7R w - - 11 26",
+    "8/8/1r6/p7/P2k4/8/2pp2K1/3k2K1 w - - 4 42",
+
+    // 2-man positions
+    "2K5/8/4r3/8/8/8/8/8 b - - 0 1", // win
+
+    // 3-man positions
+    "8/3nP3/8/8/8/8/7R/8 w - - 0 1", // e8B - win
+    "8/8/8/8/3K4/5K2/8/1r6 w - - 0 1", // draw
+
+    // 5-man positions
+    "8/pb4Pp/8/2p5/8/8/8/8 b - - 0 1", // Bc6 - draw
+    "k7/8/3PN3/p4K2/8/8/8/8 b - - 0 1", // loss
+
+    // 6-man positions
+    "8/3K4/2K5/3K1K2/8/8/3kk3/8 b - - 0 1", // draw
+
+    // Win by having no pieces left
+    "3q4/3k1pp1/7n/5p2/8/4r3/8/8 w - - 0 1",
+
+    // Stalemate
+    "1r6/5k2/8/p4b2/P1p5/8/8/8 w - - 0 1",
+    "7b/7P/8/2p5/2P5/8/8/8 w - - 0 1",
+    "6bB/5pP1/5P2/8/8/8/8/8 w - - 0 1"
   },
 #endif
 #ifdef ATOMIC
@@ -98,7 +125,21 @@ const vector<string> Defaults[VARIANT_NB] = {
 #endif
 #ifdef CRAZYHOUSE
   {
-    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1"
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+    "rnbqkb1r/ppp1pppp/5n2/3pP3/8/8/PPPP1PPP/RNBQKBNR[] w KQkq d6 4 3", // en passant
+    "r1bk3r/pppp1Bpp/2n5/4p1N1/4P3/3P4/PPP1p1PP/RNK4R[NQPBqb] b - - 23 12", // repetition detection
+    "r3k2r/pppb1ppp/4n3/2P1Q3/2p1n3/2Pb1N2/PP1NpPPP/R1BqR1K1[BP] w kq - 28 15",
+    "r1b1kb1r/p1p3pp/2pp4/8/4P3/2NR3P/PPP2P1P/5K1R[BBQNnqnppp] b kq - 39 20", // many pieces in hand
+    "r1b1r1k1/ppp1Pppp/8/3p4/3P2P1/PN6/2PBQP1P/q1q~1KB1R[NNbrnp] w - - 42 22", // promoted queen
+    "r3kb1r/1bpppppp/p1N2p2/2NPP3/2PP4/2N2Pb1/P3P1R1/R1Q2KBq[Pn] w kq - 54 28",
+    "7k/Q2P1pp1/2PPpn1p/3p1b2/3P4/P1n1P3/P1n1bPPP/R1B3KR[RRqbnp] w - - 48 25", // promotion
+
+    // Checkmate
+    "r1b2rk1/pppp1ppp/2P2b2/1N6/5N2/4P1K1/P1P4P/1Nrb1b1n~[NPPQQrp] w - - 64 33", // promoted knight
+    "1Rbk3r/p1pQ1ppp/2Bn3n/4p1b1/4Pn2/3p4/PbPP1PPP/3RK1R1[QPPn] b - - 45 23",
+
+    // Stalemate
+    "2R5/3Q2pk/2p1p3/1pP1P1Qp/1P3P1P/p1P1B3/P7/1R2K3[NRBNPBPRNPBN] b - - 98 55",
   },
 #endif
 #ifdef HORDE
@@ -108,12 +149,67 @@ const vector<string> Defaults[VARIANT_NB] = {
 #endif
 #ifdef KOTH
   {
-    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 10",
+    "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 11",
+    "4rrk1/pp1n3p/3q2pQ/2p1pb2/2PP4/2P3N1/P2B2PP/4RRK1 b - - 7 19",
+    "rq3rk1/ppp2ppp/1bnpb3/3N2B1/3NP3/7P/PPPQ1PP1/2KR3R w - - 7 14",
+    "r1bq1r1k/1pp1n1pp/1p1p4/4p2Q/4Pp2/1BNP4/PPP2PPP/3R1RK1 w - - 2 14",
+    "r3r1k1/2p2ppp/p1p1bn2/8/1q2P3/2NPQN2/PPP3PP/R4RK1 b - - 2 15",
+    "r1bbk1nr/pp3p1p/2n5/1N4p1/2Np1B2/8/PPP2PPP/2KR1B1R w kq - 0 13",
+    "r1bq1rk1/ppp1nppp/4n3/3p3Q/3P4/1BP1B3/PP1N2PP/R4RK1 w - - 1 16",
+    "4r1k1/r1q2ppp/ppp2n2/4P3/5Rb1/1N1BQ3/PPP3PP/R5K1 w - - 1 17",
+    "2rqkb1r/ppp2p2/2npb1p1/1N1Nn2p/2P1PP2/8/PP2B1PP/R1BQK2R b KQ - 0 11",
+    "r1bq1r1k/b1p1npp1/p2p3p/1p6/3PP3/1B2NN2/PP3PPP/R2Q1RK1 w - - 1 16",
+    "3r1rk1/p5pp/bpp1pp2/8/q1PP1P2/b3P3/P2NQRPP/1R2B1K1 b - - 6 22",
+    "r1q2rk1/2p1bppp/2Pp4/p6b/Q1PNp3/4B3/PP1R1PPP/2K4R w - - 2 18",
+    "4k2r/1pb2ppp/1p2p3/1R1p4/3P4/2r1PN2/P4PPP/1R4K1 b - - 3 22",
+    "3q2k1/pb3p1p/4pbp1/2r5/PpN2N2/1P2P2P/5PP1/Q2R2K1 b - - 4 26",
+    "6k1/6p1/6Pp/ppp5/3pn2P/1P3K2/1PP2P2/3N4 b - - 0 1",
+    "3b4/5kp1/1p1p1p1p/pP1PpP1P/P1P1P3/3KN3/8/8 w - - 0 1",
+    "2K5/p7/7P/5pR1/8/5k2/r7/8 w - - 0 1",
+    "8/6pk/1p6/8/PP3p1p/5P2/4KP1q/3Q4 w - - 0 1",
+    "7k/3p2pp/4q3/8/4Q3/5Kp1/P6b/8 w - - 0 1",
+    "8/1p3pp1/7p/5P1P/2k3P1/8/2K2P2/8 w - - 0 1",
+    "8/pp2r1k1/2p1p3/3pP2p/1P1P1P1P/P5KR/8/8 w - - 0 1",
+    "8/3p4/p1bk3p/Pp6/1Kp1PpPp/2P2P1P/2P5/5B2 b - - 0 1",
+    "5k2/7R/4P2p/5K2/p1r2P1p/8/8/8 b - - 0 1",
+    "6k1/6p1/P6p/r1N5/5p2/7P/1b3PP1/4R1K1 w - - 0 1",
+    "1r3k2/4q3/2Pp3b/3Bp3/2Q2p2/1p1P2P1/1P2KP2/3N4 w - - 0 1",
+    "6k1/4pp1p/3p2p1/P1pPb3/R7/1r2P1PP/3B1P2/6K1 w - - 0 1",
+    "8/3p3B/5p2/5P2/p7/PP5b/k7/6K1 w - - 0 1",
+
+    // 5-man positions
+    "8/8/8/8/5kp1/P7/8/1K1N4 w - - 0 1",
+    "8/8/8/5N2/8/p7/8/2NK3k w - - 0 1",
+    "8/3k4/8/8/8/4B3/4KB2/2B5 w - - 0 1",
+
+    // 6-man positions
+    "8/8/1P6/5pr1/8/4R3/7k/2K5 w - - 0 1",
+    "8/2p4P/8/kr6/6R1/8/8/1K6 w - - 0 1",
+    "8/8/3P3k/8/1p6/8/1P6/1K3n2 b - - 0 1",
+
+    // 7-man positions
+    "8/R7/2q5/8/6k1/8/1P5p/K6R w - - 0 124",
+
+    // Mate and stalemate positions
+    "8/8/8/8/8/6k1/6p1/6K1 w - -",
+    "5k2/5P2/5K2/8/8/8/8/8 b - -",
+    "8/8/8/8/8/4k3/4p3/4K3 w - -",
+    "8/8/8/8/8/5K2/8/3Q1k2 b - -",
+    "7k/7P/6K1/8/3B4/8/8/8 b - -",
+
+    // King in the center
+    "8/2p5/8/2kPKp1p/2p4P/2P5/3P4/8 b - - 0 1",
+    "8/8/8/4k3/8/3K4/8/8 w - - 0 1"
   },
 #endif
 #ifdef LOSERS
   {
-    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    "8/4P2p/2pk2p1/1p6/1B2P3/7N/3NKPPP/5B1R b - - 0 22",
+    "8/4P2p/2pk2p1/pp6/1B2P3/7N/3NKPPP/5B1R b - - 0 22",
+    "1k6/1b2p3/8/3P4/8/8/8/1R5K b - - 0 1",
+    "4k3/4p3/8/1r1P3K/B7/8/8/8 b - - 0 1"
   },
 #endif
 #ifdef RACE
@@ -130,6 +226,116 @@ const vector<string> Defaults[VARIANT_NB] = {
   {
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 3+3 0 1"
   },
+#endif
+#ifdef SUICIDE
+  {
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1",
+    "rn1qkbnr/p1pBpppp/8/8/8/4P3/PPPP1PbP/RNBQK1NR w - - 0 4",
+    "rnbqkbnr/p2p1ppp/8/2p1p3/2pP4/2N3P1/PP2PP1P/R1BQKBNR b - d3 0 5",
+    "rnb1kbn1/p4ppr/8/3q4/1p6/6PB/P3PP1P/R1B1K1NR b - - 1 11",
+    "r7/4rp1p/4p3/p1p5/P1P1P2P/8/2K1NPP1/7R w - - 11 26",
+    "8/8/1r6/p7/P2k4/8/2pp2K1/3k2K1 w - - 4 42",
+
+    // 2-man positions
+    "2K5/8/4r3/8/8/8/8/8 b - - 0 1", // win
+
+    // 3-man positions
+    "8/3nP3/8/8/8/8/7R/8 w - - 0 1", // e8B - win
+    "8/8/8/8/3K4/5K2/8/1r6 w - - 0 1", // draw
+
+    // 5-man positions
+    "8/pb4Pp/8/2p5/8/8/8/8 b - - 0 1", // Bc6 - draw
+    "k7/8/3PN3/p4K2/8/8/8/8 b - - 0 1", // loss
+
+    // 6-man positions
+    "8/3K4/2K5/3K1K2/8/8/3kk3/8 b - - 0 1", // draw
+
+    // Win by having no pieces left
+    "3q4/3k1pp1/7n/5p2/8/4r3/8/8 w - - 0 1",
+
+    // Stalemate
+    "1r6/5k2/8/p4b2/P1p5/8/8/8 w - - 0 1", // less pieces
+    "7b/7P/8/2p5/2P5/8/8/8 w - - 0 1", // equal number of pieces
+    "6bB/5pP1/5P2/8/8/8/8/8 w - - 0 1" // more pieces
+  },
+#endif
+#ifdef BUGHOUSE
+  {
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+    "rnbqkb1r/ppp1pppp/5n2/3pP3/8/8/PPPP1PPP/RNBQKBNR[] w KQkq d6 4 3", // en passant
+    "r1bk3r/pppp1Bpp/2n5/4p1N1/4P3/3P4/PPP1p1PP/RNK4R[NQPBqb] b - - 23 12", // repetition detection
+    "r3k2r/pppb1ppp/4n3/2P1Q3/2p1n3/2Pb1N2/PP1NpPPP/R1BqR1K1[BP] w kq - 28 15",
+    "r1b1kb1r/p1p3pp/2pp4/8/4P3/2NR3P/PPP2P1P/5K1R[BBQNnqnppp] b kq - 39 20", // many pieces in hand
+    "r1b1r1k1/ppp1Pppp/8/3p4/3P2P1/PN6/2PBQP1P/q1q1KB1R[NNbrnp] w - - 42 22",
+    "r3kb1r/1bpppppp/p1N2p2/2NPP3/2PP4/2N2Pb1/P3P1R1/R1Q2KBq[Pn] w kq - 54 28",
+    "7k/Q2P1pp1/2PPpn1p/3p1b2/3P4/P1n1P3/P1n1bPPP/R1B3KR[RRqbnp] w - - 48 25", // promotion
+
+    // Checkmate
+    "r1b2rk1/pppp1ppp/2P2b2/1N6/5N2/4P1K1/P1P4P/1Nrb1b1n[NPPQQrp] w - - 64 33",
+    "1Rbk3r/p1pQ1ppp/2Bn3n/4p1b1/4Pn2/3p4/PbPP1PPP/3RK1R1[QPPn] b - - 45 23",
+
+    // Stalemate
+    "2R5/3Q2pk/2p1p3/1pP1P1Qp/1P3P1P/p1P1B3/P7/1R2K3[NRBNPBPRNPBN] b - - 98 55",
+  },
+#endif
+#ifdef LOOP
+  {
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1",
+    "rnbqkb1r/ppp1pppp/5n2/3pP3/8/8/PPPP1PPP/RNBQKBNR[] w KQkq d6 4 3", // en passant
+    "r1bk3r/pppp1Bpp/2n5/4p1N1/4P3/3P4/PPP1p1PP/RNK4R[NQPBqb] b - - 23 12", // repetition detection
+    "r3k2r/pppb1ppp/4n3/2P1Q3/2p1n3/2Pb1N2/PP1NpPPP/R1BqR1K1[BP] w kq - 28 15",
+    "r1b1kb1r/p1p3pp/2pp4/8/4P3/2NR3P/PPP2P1P/5K1R[BBQNnqnppp] b kq - 39 20", // many pieces in hand
+    "r1b1r1k1/ppp1Pppp/8/3p4/3P2P1/PN6/2PBQP1P/q1q1KB1R[NNbrnp] w - - 42 22",
+    "r3kb1r/1bpppppp/p1N2p2/2NPP3/2PP4/2N2Pb1/P3P1R1/R1Q2KBq[Pn] w kq - 54 28",
+    "7k/Q2P1pp1/2PPpn1p/3p1b2/3P4/P1n1P3/P1n1bPPP/R1B3KR[RRqbnp] w - - 48 25", // promotion
+
+    // Checkmate
+    "r1b2rk1/pppp1ppp/2P2b2/1N6/5N2/4P1K1/P1P4P/1Nrb1b1n[NPPQQrp] w - - 64 33",
+    "1Rbk3r/p1pQ1ppp/2Bn3n/4p1b1/4Pn2/3p4/PbPP1PPP/3RK1R1[QPPn] b - - 45 23",
+
+    // Stalemate
+    "2R5/3Q2pk/2p1p3/1pP1P1Qp/1P3P1P/p1P1B3/P7/1R2K3[NRBNPBPRNPBN] b - - 98 55",
+  },
+#endif
+};
+
+const int default_depth[SUBVARIANT_NB] = {
+  13,
+#ifdef ANTI
+  13,
+#endif
+#ifdef ATOMIC
+  13,
+#endif
+#ifdef CRAZYHOUSE
+  12,
+#endif
+#ifdef HORDE
+  13,
+#endif
+#ifdef KOTH
+  13,
+#endif
+#ifdef LOSERS
+  13,
+#endif
+#ifdef RACE
+  13,
+#endif
+#ifdef RELAY
+  13,
+#endif
+#ifdef THREECHECK
+  13,
+#endif
+#ifdef SUICIDE
+  13,
+#endif
+#ifdef BUGHOUSE
+  12,
+#endif
+#ifdef LOOP
+  12,
 #endif
 };
 
@@ -148,12 +354,21 @@ void benchmark(const Position& current, istream& is) {
   string token;
   vector<string> fens;
   Search::LimitsType limits;
-  Variant variant = UCI::variant_from_name(Options["UCI_Variant"]);
+
+  uint64_t nodes = 0;
+  TimePoint elapsed = now();
+  Position pos;
+
+  string varname   = (!isdigit((is >> ws).peek()) && is >> token) ? token : Options["UCI_Variant"];
+  Variant variant  = varname == "all" ? CHESS_VARIANT : UCI::variant_from_name(varname);
+  streampos args = is.tellg();
+
+  do {
 
   // Assign default values to missing arguments
   string ttSize    = (is >> token) ? token : "16";
   string threads   = (is >> token) ? token : "1";
-  string limit     = (is >> token) ? token : "13";
+  string limit     = (is >> token) ? token : to_string(default_depth[variant]);
   string fenFile   = (is >> token) ? token : "default";
   string limitType = (is >> token) ? token : "depth";
 
@@ -174,7 +389,14 @@ void benchmark(const Position& current, istream& is) {
       limits.depth = stoi(limit);
 
   if (fenFile == "default")
+  {
       fens = Defaults[variant];
+      if (variant == LOSERS_VARIANT)
+      {
+          vector<string> chessFens = Defaults[CHESS_VARIANT];
+          fens.insert(fens.begin(), chessFens.begin(), chessFens.end());
+      }
+  }
 
   else if (fenFile == "current")
       fens.push_back(current.fen());
@@ -197,10 +419,6 @@ void benchmark(const Position& current, istream& is) {
       file.close();
   }
 
-  uint64_t nodes = 0;
-  TimePoint elapsed = now();
-  Position pos;
-
   for (size_t i = 0; i < fens.size(); ++i)
   {
       StateListPtr states(new std::deque<StateInfo>(1));
@@ -219,6 +437,8 @@ void benchmark(const Position& current, istream& is) {
           nodes += Threads.nodes_searched();
       }
   }
+
+  } while (varname == "all" && ++variant < SUBVARIANT_NB && (is.clear(), is.seekg(args)));
 
   elapsed = now() - elapsed + 1; // Ensure positivity to avoid a 'divide by zero'
 
