@@ -36,7 +36,7 @@ namespace {
     //            OUR PIECES
     // pair pawn knight bishop rook queen
     {1667                               }, // Bishop pair
-    {  40,    2                         }, // Pawn
+    {  40,    0                         }, // Pawn
     {  32,  255,  -3                    }, // Knight      OUR PIECES
     {   0,  104,   4,    0              }, // Bishop
     { -26,   -2,  47,   105,  -149      }, // Rook
@@ -46,13 +46,13 @@ namespace {
     {
       //            OUR PIECES
       // pair pawn knight bishop rook queen king
-      {  -62                                    }, // Bishop pair
-      { -179,  59                               }, // Pawn
-      {  -50,  178,  -47                        }, // Knight      OUR PIECES
-      {    0, -130, -187,    0                  }, // Bishop
-      { -155, -317,   60, -218, -288            }, // Rook
-      {   89, -259,  -60, -179,  -32, -76       }, // Queen
-      {    0,    0,    0,    0,    0,   0,    0 }  // King
+      { -129                                    }, // Bishop pair
+      { -205,   49                              }, // Pawn
+      {  -81,  436,  -81                        }, // Knight      OUR PIECES
+      {    0, -204, -328,    0                  }, // Bishop
+      { -197, -436,  -12, -183,   92            }, // Rook
+      {  197,   40,  133, -179,   93, -66       }, // Queen
+      {    1,  -48,   98,   36,   82, 165, -168 }  // King
     },
 #endif
 #ifdef ATOMIC
@@ -60,36 +60,36 @@ namespace {
       //            OUR PIECES
       // pair pawn knight bishop rook queen
       {1667                               }, // Bishop pair
-      {  40,    2                         }, // Pawn
-      {  32,  255,  -3                    }, // Knight      OUR PIECES
-      {   0,  104,   4,    0              }, // Bishop
-      { -26,   -2,  47,   105,  -149      }, // Rook
-      {-185,   24, 122,   137,  -134,   0 }  // Queen
+      {  37,  -18                         }, // Pawn
+      {  38,  261, -10                    }, // Knight      OUR PIECES
+      {   0,   91,  -2,     0             }, // Bishop
+      { -19,  -18,  28,    90,  -149      }, // Rook
+      {-175,   18, 109,   149,  -124,   0 }  // Queen
     },
 #endif
 #ifdef CRAZYHOUSE
     {
       //            OUR PIECES
       // pair pawn knight bishop rook queen
-      {1667                               }, // Bishop pair
-      {  40,    2                         }, // Pawn
-      {  32,  255,  -3                    }, // Knight      OUR PIECES
-      {   0,  104,   4,    0              }, // Bishop
-      { -26,   -2,  47,   105,  -149      }, // Rook
-      {-185,   24, 122,   137,  -134,   0 }  // Queen
+      { 983                               }, // Bishop pair
+      { 129,  -16                         }, // Pawn
+      {   6,  151,   0                    }, // Knight      OUR PIECES
+      { -66,   66, -59,     6             }, // Bishop
+      {-107,    6,  11,   107,  -137      }, // Rook
+      {-198, -112,  83,   166,  -160, -18 }  // Queen
     },
 #endif
 #ifdef HORDE
     {
       //            OUR PIECES
       // pair pawn knight bishop rook queen king
-      { 0                                      }, // Bishop pair
-      { 0,    0                                }, // Pawn
-      { 0,    0,   0                           }, // Knight      OUR PIECES
-      { 0,    0,   0,     0                    }, // Bishop
-      { 0,    0,   0,     0,     0             }, // Rook
-      { 0,    0,   0,     0,     0,   0        }, // Queen
-      { 0,    0,   0,     0,     0,   0,    0  }  // King
+      {  13                                      }, // Bishop pair
+      {  -2,    0                                }, // Pawn
+      { -65,   66,   15                          }, // Knight      OUR PIECES
+      {   0,   81,   -2,    0                    }, // Bishop
+      {  26,   21,  -38,   80,   -70             }, // Rook
+      {  24,  -27,   75,   32,     2,  -70       }, // Queen
+      {   0,    0,    0,    0,     0,    0,    0 }  // King
     },
 #endif
 #ifdef KOTH
@@ -108,12 +108,12 @@ namespace {
     {
       //            OUR PIECES
       // pair pawn knight bishop rook queen
-      {1667                               }, // Bishop pair
-      {  40,    2                         }, // Pawn
-      {  32,  255,  -3                    }, // Knight      OUR PIECES
-      {   0,  104,   4,    0              }, // Bishop
-      { -26,   -2,  47,   105,  -149      }, // Rook
-      {-185,   24, 122,   137,  -134,   0 }  // Queen
+      {1634                               }, // Bishop pair
+      {  24,  156                         }, // Pawn
+      {  90,  243, 133                    }, // Knight      OUR PIECES
+      {   0,  120,  66,     0             }, // Bishop
+      {  11,   -2,  41,    15,  -166      }, // Rook
+      {-251,  258,  86,   141,  -205,  43 }  // Queen
     },
 #endif
 #ifdef RACE
@@ -121,11 +121,11 @@ namespace {
       //            OUR PIECES
       // pair pawn knight bishop rook queen
       {1667                               }, // Bishop pair
-      {  40,    2                         }, // Pawn
-      {  32,  255,  -3                    }, // Knight      OUR PIECES
-      {   0,  104,   4,    0              }, // Bishop
-      { -26,   -2,  47,   105,  -149      }, // Rook
-      {-185,   24, 122,   137,  -134,   0 }  // Queen
+      {   0,    0                         }, // Pawn
+      {  32,    0,  -3                    }, // Knight      OUR PIECES
+      {   0,    0,   4,    0              }, // Bishop
+      { -26,    0,  47,   105,  -149      }, // Rook
+      {-185,    0, 122,   137,  -134,   0 }  // Queen
     },
 #endif
 #ifdef RELAY
@@ -153,6 +153,18 @@ namespace {
     },
 #endif
   };
+#ifdef CRAZYHOUSE
+  const int QuadraticOursInHand[PIECE_TYPE_NB][PIECE_TYPE_NB] = {
+      //            OUR PIECES
+      //empty pawn knight bishop rook queen
+      {-148                               }, // Empty hand
+      {   1,  -33                         }, // Pawn
+      {  64,   34,   5                    }, // Knight      OUR PIECES
+      { -17, -128, -35,     6             }, // Bishop
+      {  14,  -18,  55,   -60,    76      }, // Rook
+      { -22,   17,  39,   -20,    26,  -8 }  // Queen
+  };
+#endif
 
   const int QuadraticTheirs[VARIANT_NB][PIECE_TYPE_NB][PIECE_TYPE_NB] = {
     {
@@ -170,12 +182,12 @@ namespace {
       //           THEIR PIECES
       // pair pawn knight bishop rook queen king
       {    0                                   }, // Bishop pair
-      {  110,    0                             }, // Pawn
-      {    9,   60,    0                       }, // Knight      OUR PIECES
-      {  -53, -143,   33,    0                 }, // Bishop
-      {   73, -298,    3,   41,   0            }, // Rook
-      { -141, -370,   56,   45, -79,   0       }, // Queen
-      {    0,    0,    0,    0,   0,   0,    0 }  // King
+      {   55,    0                             }, // Pawn
+      {   23,   27,    0                       }, // Knight      OUR PIECES
+      {  -37, -248,  -18,    0                 }, // Bishop
+      { -109, -628, -145,  102,   0            }, // Rook
+      { -156, -133,  134,   78,  48,    0      }, // Queen
+      {   22,  155,   84,   49, -49, -104,   0 }  // King
     },
 #endif
 #ifdef ATOMIC
@@ -183,23 +195,23 @@ namespace {
       //           THEIR PIECES
       // pair pawn knight bishop rook queen
       {   0                               }, // Bishop pair
-      {  36,    0                         }, // Pawn
-      {   9,   63,   0                    }, // Knight      OUR PIECES
-      {  59,   65,  42,     0             }, // Bishop
-      {  46,   39,  24,   -24,    0       }, // Rook
-      { 101,  100, -37,   141,  268,    0 }  // Queen
+      {  57,    0                         }, // Pawn
+      {  16,   47,   0                    }, // Knight      OUR PIECES
+      {  65,   62,  29,     0             }, // Bishop
+      {  31,   54,  17,   -18,    0       }, // Rook
+      { 105,   97, -34,   151,  278,    0 }  // Queen
     },
 #endif
 #ifdef CRAZYHOUSE
     {
       //           THEIR PIECES
       // pair pawn knight bishop rook queen
-      {   0                               }, // Bishop pair
-      {  36,    0                         }, // Pawn
-      {   9,   63,   0                    }, // Knight      OUR PIECES
-      {  59,   65,  42,     0             }, // Bishop
-      {  46,   39,  24,   -24,    0       }, // Rook
-      { 101,  100, -37,   141,  268,    0 }  // Queen
+      { -54                               }, // Bishop pair
+      {  44, -109                         }, // Pawn
+      {  32,    1,   2                    }, // Knight      OUR PIECES
+      {  97,   49,  12,   -15             }, // Bishop
+      {  23,   46,   0,    -2,   23       }, // Rook
+      {  75,   43,  20,    65,  221,   83 }  // Queen
     },
 #endif
 #ifdef HORDE
@@ -212,7 +224,7 @@ namespace {
       { 0,     0,     0,     0                  }, // Bishop
       { 0,     0,     0,     0,     0           }, // Rook
       { 0,     0,     0,     0,     0,    0     }, // Queen
-      { 0,  -789,  -872,   -19,  -416, -594,  0 }  // King
+      { 0,  -557,  -711,   -86,  -386, -655,  0 }  // King
     },
 #endif
 #ifdef KOTH
@@ -231,12 +243,12 @@ namespace {
     {
       //           THEIR PIECES
       // pair pawn knight bishop rook queen
-      {   0                               }, // Bishop pair
-      {  36,    0                         }, // Pawn
-      {   9,   63,   0                    }, // Knight      OUR PIECES
-      {  59,   65,  42,     0             }, // Bishop
-      {  46,   39,  24,   -24,    0       }, // Rook
-      { 101,  100, -37,   141,  268,    0 }  // Queen
+      {   0                                }, // Bishop pair
+      {-132,    0                          }, // Pawn
+      {  -5,  185,    0                    }, // Knight      OUR PIECES
+      {  59,  440, -106,     0             }, // Bishop
+      { 277,   30,    5,    27,    0       }, // Rook
+      { 217,  357,    5,    51,  254,    0 }  // Queen
     },
 #endif
 #ifdef RACE
@@ -244,11 +256,11 @@ namespace {
       //           THEIR PIECES
       // pair pawn knight bishop rook queen
       {   0                               }, // Bishop pair
-      {  36,    0                         }, // Pawn
-      {   9,   63,   0                    }, // Knight      OUR PIECES
-      {  59,   65,  42,     0             }, // Bishop
-      {  46,   39,  24,   -24,    0       }, // Rook
-      { 101,  100, -37,   141,  268,    0 }  // Queen
+      {   0,    0                         }, // Pawn
+      {   9,    0,   0                    }, // Knight      OUR PIECES
+      {  59,    0,  42,     0             }, // Bishop
+      {  46,    0,  24,   -24,    0       }, // Rook
+      { 101,    0, -37,   141,  268,    0 }  // Queen
     },
 #endif
 #ifdef RELAY
@@ -275,6 +287,29 @@ namespace {
       { 101,  100, -37,   141,  268,    0 }  // Queen
     },
 #endif
+  };
+#ifdef CRAZYHOUSE
+  const int QuadraticTheirsInHand[PIECE_TYPE_NB][PIECE_TYPE_NB] = {
+      //           THEIR PIECES
+      //empty pawn knight bishop rook queen
+      { -40                               }, // Empty hand
+      {  41,   11                         }, // Pawn
+      { -62,   -9,  26                    }, // Knight      OUR PIECES
+      {  34,   33,  42,    88             }, // Bishop
+      { -24,    0,  58,    90,   -38      }, // Rook
+      {  78,    3,  46,    37,   -26,  -1 }  // Queen
+  };
+#endif
+
+  // PawnSet[pawn count] contains a bonus/malus indexed by number of pawns
+  const int PawnSet[] = {
+    24, -32, 107, -51, 117, -9, -126, -21, 31
+  };
+
+  // QueenMinorsImbalance[opp_minor_count] is applied when only one side has a queen.
+  // It contains a bonus/malus for the side with the queen.
+  const int QueenMinorsImbalance[16] = { 
+    31, -8, -15, -25, -5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
   };
 
   // Endgame evaluation and scaling functions are accessed directly and not through
@@ -319,11 +354,16 @@ namespace {
   /// imbalance() calculates the imbalance by comparing the piece count of each
   /// piece type for both colors.
   template<Color Us>
+#ifdef CRAZYHOUSE
+  int imbalance(const Position& pos, const int pieceCount[][PIECE_TYPE_NB],
+                const int pieceCountInHand[][PIECE_TYPE_NB]) {
+#else
   int imbalance(const Position& pos, const int pieceCount[][PIECE_TYPE_NB]) {
+#endif
 
     const Color Them = (Us == WHITE ? BLACK : WHITE);
 
-    int bonus = 0;
+    int bonus = PawnSet[std::min(pieceCount[Us][PAWN], (int)FILE_NB)];
 
     // Second-degree polynomial material imbalance by Tord Romstad
     PieceType pt_max =
@@ -348,6 +388,26 @@ namespace {
 
         bonus += pieceCount[Us][pt1] * v;
     }
+#ifdef CRAZYHOUSE
+    if (pos.is_house())
+        for (int pt1 = NO_PIECE_TYPE; pt1 <= pt_max; ++pt1)
+        {
+            if (!pieceCountInHand[Us][pt1])
+                continue;
+
+            int v = 0;
+
+            for (int pt2 = NO_PIECE_TYPE; pt2 <= pt1; ++pt2)
+                v +=  QuadraticOursInHand[pt1][pt2] * pieceCountInHand[Us][pt2]
+                    + QuadraticTheirsInHand[pt1][pt2] * pieceCountInHand[Them][pt2];
+
+            bonus += pieceCountInHand[Us][pt1] * v;
+        }
+#endif
+
+    // Special handling of Queen vs. Minors
+    if  (pieceCount[Us][QUEEN] == 1 && pieceCount[Them][QUEEN] == 0)
+         bonus += QueenMinorsImbalance[pieceCount[Them][KNIGHT] + pieceCount[Them][BISHOP]];
 
     return bonus;
   }
@@ -407,7 +467,7 @@ Entry* probe(const Position& pos) {
 
   if ((sf = pos.this_thread()->endgames.probe<ScaleFactor>(key)) != nullptr)
   {
-      e->scalingFunction[sf->strong_side()] = sf; // Only strong color assigned
+      e->scalingFunction[sf->strongSide] = sf; // Only strong color assigned
       return e;
   }
 
@@ -486,8 +546,22 @@ Entry* probe(const Position& pos) {
     pos.count<BISHOP>(WHITE)    , pos.count<ROOK>(WHITE), pos.count<QUEEN >(WHITE), pos.count<KING>(WHITE) },
   { pos.count<BISHOP>(BLACK) > 1, pos.count<PAWN>(BLACK), pos.count<KNIGHT>(BLACK),
     pos.count<BISHOP>(BLACK)    , pos.count<ROOK>(BLACK), pos.count<QUEEN >(BLACK), pos.count<KING>(BLACK) } };
+#ifdef CRAZYHOUSE
+  if (pos.is_house())
+  {
+      const int PieceCountInHand[COLOR_NB][PIECE_TYPE_NB] = {
+      { pos.count_in_hand<ALL_PIECES>(WHITE) == 0, pos.count_in_hand<PAWN>(WHITE), pos.count_in_hand<KNIGHT>(WHITE),
+        pos.count_in_hand<BISHOP>(WHITE)         , pos.count_in_hand<ROOK>(WHITE), pos.count_in_hand<QUEEN >(WHITE), pos.count_in_hand<KING>(WHITE) },
+      { pos.count_in_hand<ALL_PIECES>(BLACK) == 0, pos.count_in_hand<PAWN>(BLACK), pos.count_in_hand<KNIGHT>(BLACK),
+        pos.count_in_hand<BISHOP>(BLACK)         , pos.count_in_hand<ROOK>(BLACK), pos.count_in_hand<QUEEN >(BLACK), pos.count_in_hand<KING>(BLACK) } };
 
+      e->value = int16_t((imbalance<WHITE>(pos, PieceCount, PieceCountInHand) - imbalance<BLACK>(pos, PieceCount, PieceCountInHand)) / 16);
+  }
+  else
+      e->value = int16_t((imbalance<WHITE>(pos, PieceCount, NULL) - imbalance<BLACK>(pos, PieceCount, NULL)) / 16);
+#else
   e->value = int16_t((imbalance<WHITE>(pos, PieceCount) - imbalance<BLACK>(pos, PieceCount)) / 16);
+#endif
   return e;
 }
 

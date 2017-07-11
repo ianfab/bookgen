@@ -27,6 +27,13 @@
 #include "uci.h"
 #include "syzygy/tbprobe.h"
 
+#ifndef _WIN32
+void* run_idle_loop(void* thread) {
+  static_cast<Thread*>(thread)->idle_loop();
+  return nullptr;
+}
+#endif
+
 ThreadPool Threads; // Global object
 
 /// Thread constructor launches the thread and then waits until it goes to sleep
@@ -34,14 +41,23 @@ ThreadPool Threads; // Global object
 
 Thread::Thread() {
 
-  resetCalls = exit = false;
-  maxPly = callsCnt = 0;
-  tbHits = 0;
+  exit = false;
+  maxPly = 0;
+  nodes = tbHits = 0;
   idx = Threads.size(); // Start from 0
 
   std::unique_lock<Mutex> lk(mutex);
   searching = true;
+#ifdef _WIN32
   nativeThread = std::thread(&Thread::idle_loop, this);
+#else
+  // With increased MAX_MOVES the stack can grow larger than the system
+  // default. Explicitly set a sufficient stack size.
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, 4096 * MAX_MOVES);
+  pthread_create(&nativeThread, &attr, run_idle_loop, this);
+#endif
   sleepCondition.wait(lk, [&]{ return !searching; });
 }
 
@@ -54,7 +70,11 @@ Thread::~Thread() {
   exit = true;
   sleepCondition.notify_one();
   mutex.unlock();
+#ifdef _WIN32
   nativeThread.join();
+#else
+  pthread_join(nativeThread, nullptr);
+#endif
 }
 
 
@@ -163,7 +183,7 @@ uint64_t ThreadPool::nodes_searched() const {
 
   uint64_t nodes = 0;
   for (Thread* th : *this)
-      nodes += th->rootPos.nodes_searched();
+      nodes += th->nodes.load(std::memory_order_relaxed);
   return nodes;
 }
 
@@ -174,7 +194,7 @@ uint64_t ThreadPool::tb_hits() const {
 
   uint64_t hits = 0;
   for (Thread* th : *this)
-      hits += th->tbHits;
+      hits += th->tbHits.load(std::memory_order_relaxed);
   return hits;
 }
 
@@ -211,6 +231,7 @@ void ThreadPool::start_thinking(Position& pos, StateListPtr& states,
   for (Thread* th : Threads)
   {
       th->maxPly = 0;
+      th->nodes = 0;
       th->tbHits = 0;
       th->rootDepth = DEPTH_ZERO;
       th->rootMoves = rootMoves;

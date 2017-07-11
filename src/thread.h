@@ -22,10 +22,13 @@
 #define THREAD_H_INCLUDED
 
 #include <atomic>
-#include <bitset>
 #include <condition_variable>
 #include <mutex>
+#ifdef _WIN32
 #include <thread>
+#else
+#include <pthread.h>
+#endif
 #include <vector>
 
 #include "material.h"
@@ -43,7 +46,11 @@
 
 class Thread {
 
+#ifdef _WIN32
   std::thread nativeThread;
+#else
+  pthread_t nativeThread;
+#endif
   Mutex mutex;
   ConditionVariable sleepCondition;
   bool exit, searching;
@@ -61,17 +68,16 @@ public:
   Material::Table materialTable;
   Endgames endgames;
   size_t idx, PVIdx;
-  int maxPly, callsCnt;
-  uint64_t tbHits;
+  int maxPly;
+  std::atomic<uint64_t> nodes, tbHits;
 
   Position rootPos;
   Search::RootMoves rootMoves;
   Depth rootDepth;
   Depth completedDepth;
-  std::atomic_bool resetCalls;
-  MoveStats counterMoves;
-  HistoryStats history;
-  CounterMoveHistoryStats counterMoveHistory;
+  CounterMoveStat counterMoves;
+  ButterflyHistory history;
+  CounterMoveHistoryStat counterMoveHistory;
 };
 
 
@@ -79,10 +85,12 @@ public:
 
 struct MainThread : public Thread {
   virtual void search();
+  void check_time();
 
   bool easyMovePlayed, failedLow;
   double bestMoveChanges;
   Value previousScore;
+  int callsCnt = 0;
 };
 
 

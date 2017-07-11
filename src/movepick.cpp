@@ -34,27 +34,28 @@ namespace {
     QSEARCH_RECAPTURES, QRECAPTURES
   };
 
-  // Our insertion sort, which is guaranteed to be stable, as it should be
-  void insertion_sort(ExtMove* begin, ExtMove* end)
-  {
-    ExtMove tmp, *p, *q;
+  // partial_insertion_sort() sorts moves in descending order up to and including
+  // a given limit. The order of moves smaller than the limit is left unspecified.
+  void partial_insertion_sort(ExtMove* begin, ExtMove* end, int limit) {
 
-    for (p = begin + 1; p < end; ++p)
-    {
-        tmp = *p;
-        for (q = p; q != begin && *(q-1) < tmp; --q)
-            *q = *(q-1);
-        *q = tmp;
-    }
+    for (ExtMove *sortedEnd = begin, *p = begin + 1; p < end; ++p)
+        if (p->value >= limit)
+        {
+            ExtMove tmp = *p, *q;
+            *p = *++sortedEnd;
+            for (q = sortedEnd; q != begin && *(q - 1) < tmp; --q)
+                *q = *(q - 1);
+            *q = tmp;
+        }
   }
 
   // pick_best() finds the best move in the range (begin, end) and moves it to
   // the front. It's faster than sorting all the moves in advance when there
   // are few moves, e.g., the possible captures.
-  Move pick_best(ExtMove* begin, ExtMove* end)
-  {
-      std::swap(*begin, *std::max_element(begin, end));
-      return *begin;
+  Move pick_best(ExtMove* begin, ExtMove* end) {
+
+    std::swap(*begin, *std::max_element(begin, end));
+    return *begin;
   }
 
 } // namespace
@@ -73,6 +74,8 @@ MovePicker::MovePicker(const Position& p, Move ttm, Depth d, Search::Stack* s)
 
   Square prevSq = to_sq((ss-1)->currentMove);
   countermove = pos.this_thread()->counterMoves[pos.piece_on(prevSq)][prevSq];
+  killers[0] = ss->killers[0];
+  killers[1] = ss->killers[1];
 
   stage = pos.checkers() ? EVASION : MAIN_SEARCH;
   ttMove = ttm && pos.pseudo_legal(ttm) ? ttm : MOVE_NONE;
@@ -115,7 +118,7 @@ MovePicker::MovePicker(const Position& p, Move ttm, Value th)
   ttMove =   ttm
           && pos.pseudo_legal(ttm)
           && pos.capture(ttm)
-          && pos.see_ge(ttm, threshold)? ttm : MOVE_NONE;
+          && pos.see_ge(ttm, threshold) ? ttm : MOVE_NONE;
 
   stage += (ttMove == MOVE_NONE);
 }
@@ -139,6 +142,12 @@ void MovePicker::score<CAPTURES>() {
                    - Value(50 * relative_rank(pos.side_to_move(), to_sq(m)));
       else
 #endif
+#ifdef ATOMIC
+      if (pos.is_atomic())
+          m.value = pos.see<ATOMIC_VARIANT>(m)
+                   - Value(200 * relative_rank(pos.side_to_move(), to_sq(m)));
+      else
+#endif
 #ifdef CRAZYHOUSE
       if (pos.is_house())
           m.value = PieceValue[pos.variant()][MG][pos.piece_on(to_sq(m))]
@@ -159,33 +168,43 @@ void MovePicker::score<CAPTURES>() {
 template<>
 void MovePicker::score<QUIETS>() {
 
-  const HistoryStats& history = pos.this_thread()->history;
+  const ButterflyHistory& history = pos.this_thread()->history;
 
-  const CounterMoveStats* cmh = (ss-1)->counterMoves;
-  const CounterMoveStats* fmh = (ss-2)->counterMoves;
-  const CounterMoveStats* fmh2 = (ss-4)->counterMoves;
+  const PieceToHistory& cmh = *(ss-1)->history;
+  const PieceToHistory& fmh = *(ss-2)->history;
+  const PieceToHistory& fm2 = *(ss-4)->history;
 
   Color c = pos.side_to_move();
 
   for (auto& m : *this)
-      m.value =  (cmh  ?  (*cmh)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
-               + (fmh  ?  (*fmh)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
-               + (fmh2 ? (*fmh2)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
-               + history.get(c, m);
+  {
+      m.value =  cmh[pos.moved_piece(m)][to_sq(m)]
+               + fmh[pos.moved_piece(m)][to_sq(m)]
+               + fm2[pos.moved_piece(m)][to_sq(m)]
+               + history[c][from_to(m)];
+#ifdef ANTI
+      if (pos.is_anti() && pos.attackers_to(to_sq(m), pos.pieces() ^ from_sq(m)) & pos.pieces(~c))
+      {
+          m.value += (1 << 28);
+          if (!(pos.attackers_to(from_sq(m)) & pos.pieces(~c)))
+              m.value += (1 << 27);
+      }
+#endif
+  }
 }
 
 template<>
 void MovePicker::score<EVASIONS>() {
   // Try captures ordered by MVV/LVA, then non-captures ordered by stats heuristics
-  const HistoryStats& history = pos.this_thread()->history;
+  const ButterflyHistory& history = pos.this_thread()->history;
   Color c = pos.side_to_move();
 
   for (auto& m : *this)
       if (pos.capture(m))
           m.value =  PieceValue[pos.variant()][MG][pos.piece_on(to_sq(m))]
-                   - Value(type_of(pos.moved_piece(m))) + HistoryStats::Max;
+                   - Value(type_of(pos.moved_piece(m))) + (1 << 28);
       else
-          m.value = history.get(c, m);
+          m.value = history[c][from_to(m)];
 }
 
 
@@ -194,7 +213,7 @@ void MovePicker::score<EVASIONS>() {
 /// left. It picks the move with the biggest value from a list of generated moves
 /// taking care not to return the ttMove if it has already been searched.
 
-Move MovePicker::next_move() {
+Move MovePicker::next_move(bool skipQuiets) {
 
   Move move;
 
@@ -210,6 +229,7 @@ Move MovePicker::next_move() {
       endMoves = generate<CAPTURES>(pos, cur);
       score<CAPTURES>();
       ++stage;
+      /* fallthrough */
 
   case GOOD_CAPTURES:
       while (cur < endMoves)
@@ -217,7 +237,7 @@ Move MovePicker::next_move() {
           move = pick_best(cur++, endMoves);
           if (move != ttMove)
           {
-              if (pos.see_ge(move, VALUE_ZERO))
+              if (pos.see_ge(move))
                   return move;
 
               // Losing capture, move it to the beginning of the array
@@ -226,58 +246,59 @@ Move MovePicker::next_move() {
       }
 
       ++stage;
-      move = ss->killers[0];  // First killer move
+      move = killers[0];  // First killer move
       if (    move != MOVE_NONE
           &&  move != ttMove
           &&  pos.pseudo_legal(move)
           && !pos.capture(move))
           return move;
+      /* fallthrough */
 
   case KILLERS:
       ++stage;
-      move = ss->killers[1]; // Second killer move
+      move = killers[1]; // Second killer move
       if (    move != MOVE_NONE
           &&  move != ttMove
           &&  pos.pseudo_legal(move)
           && !pos.capture(move))
           return move;
+      /* fallthrough */
 
   case COUNTERMOVE:
       ++stage;
       move = countermove;
       if (    move != MOVE_NONE
           &&  move != ttMove
-          &&  move != ss->killers[0]
-          &&  move != ss->killers[1]
+          &&  move != killers[0]
+          &&  move != killers[1]
           &&  pos.pseudo_legal(move)
           && !pos.capture(move))
           return move;
+      /* fallthrough */
 
   case QUIET_INIT:
       cur = endBadCaptures;
       endMoves = generate<QUIETS>(pos, cur);
       score<QUIETS>();
-      if (depth < 3 * ONE_PLY)
-      {
-          ExtMove* goodQuiet = std::partition(cur, endMoves, [](const ExtMove& m)
-                                             { return m.value > VALUE_ZERO; });
-          insertion_sort(cur, goodQuiet);
-      } else
-          insertion_sort(cur, endMoves);
+      partial_insertion_sort(cur, endMoves, -4000 * depth / ONE_PLY);
       ++stage;
+      /* fallthrough */
 
   case QUIET:
-      while (cur < endMoves)
+      while (    cur < endMoves
+             && (!skipQuiets || cur->value >= VALUE_ZERO))
       {
           move = *cur++;
+
           if (   move != ttMove
-              && move != ss->killers[0]
-              && move != ss->killers[1]
+              && move != killers[0]
+              && move != killers[1]
               && move != countermove)
               return move;
       }
       ++stage;
       cur = moves; // Point to beginning of bad captures
+      /* fallthrough */
 
   case BAD_CAPTURES:
       if (cur < endBadCaptures)
@@ -289,6 +310,7 @@ Move MovePicker::next_move() {
       endMoves = generate<EVASIONS>(pos, cur);
       score<EVASIONS>();
       ++stage;
+      /* fallthrough */
 
   case ALL_EVASIONS:
       while (cur < endMoves)
@@ -304,6 +326,7 @@ Move MovePicker::next_move() {
       endMoves = generate<CAPTURES>(pos, cur);
       score<CAPTURES>();
       ++stage;
+      /* fallthrough */
 
   case PROBCUT_CAPTURES:
       while (cur < endMoves)
@@ -320,6 +343,7 @@ Move MovePicker::next_move() {
       endMoves = generate<CAPTURES>(pos, cur);
       score<CAPTURES>();
       ++stage;
+      /* fallthrough */
 
   case QCAPTURES_1: case QCAPTURES_2:
       while (cur < endMoves)
@@ -333,6 +357,7 @@ Move MovePicker::next_move() {
       cur = moves;
       endMoves = generate<QUIET_CHECKS>(pos, cur);
       ++stage;
+      /* fallthrough */
 
   case QCHECKS:
       while (cur < endMoves)
@@ -348,6 +373,7 @@ Move MovePicker::next_move() {
       endMoves = generate<CAPTURES>(pos, cur);
       score<CAPTURES>();
       ++stage;
+      /* fallthrough */
 
   case QRECAPTURES:
       while (cur < endMoves)
