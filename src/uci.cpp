@@ -242,7 +242,7 @@ namespace {
     return nodes;
   }
 
-  void generate(Position& pos, istringstream& is) {
+  void generate(Position& pos, istringstream& is, vector<string>& fens) {
 
     Search::LimitsType limits;
     string token;
@@ -256,14 +256,16 @@ namespace {
         else if (token == "movetime")  is >> limits.movetime;
         else if (token == "perft")     limits.perft = depth;
 
-    vector<string> fens;
     if (limits.perft)
         perft_gen(pos, limits.perft * ONE_PLY, fens);
     else
         iter(pos, limits, depth * ONE_PLY, fens, Options["CentipawnRange"] * PawnValueEg / 100);
 
+  }
+
+  void print(vector<string>& fens) {
     for (size_t i = 0; i < fens.size(); ++i)
-        sync_cout << fens[i] + ";" << sync_endl;
+        sync_cout << fens[i] << sync_endl;
   }
 
   // bench() is called when engine receives the "bench" command. Firstly
@@ -322,6 +324,7 @@ void UCI::loop(int argc, char* argv[]) {
   string token, cmd;
   StateListPtr states(new std::deque<StateInfo>(1));
   auto uiThread = std::make_shared<Thread>(0);
+  vector<string> fens;
 
   pos.set(StartFENs[CHESS_VARIANT], false, CHESS_VARIANT, &states->back(), uiThread.get());
 
@@ -355,7 +358,11 @@ void UCI::loop(int argc, char* argv[]) {
                     << "\n"       << Options
                     << "\nuciok"  << sync_endl;
 
-      else if (token == "generate")   generate(pos, is);
+      // Book generation commands
+      else if (token == "generate")   generate(pos, is, fens);
+      else if (token == "print")      print(fens);
+      else if (token == "clear")      fens.clear();
+
       else if (token == "setoption")  setoption(is);
       else if (token == "go")         go(pos, is, states);
       else if (token == "position")   position(pos, is, states);
