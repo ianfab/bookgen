@@ -222,6 +222,26 @@ namespace {
 
   }
 
+  uint64_t perft_gen(Position& pos, Depth depth, vector<string>& fens) {
+
+    StateInfo st;
+    uint64_t nodes = 0;
+
+    if (depth < ONE_PLY)
+    {
+        fens.push_back(pos.fen());
+        return ++nodes;
+    }
+
+    for (const auto& m : MoveList<LEGAL>(pos))
+    {
+        pos.do_move(m, st);
+        nodes += perft_gen(pos, depth - ONE_PLY, fens);
+        pos.undo_move(m);
+    }
+    return nodes;
+  }
+
   void generate(Position& pos, istringstream& is) {
 
     Search::LimitsType limits;
@@ -234,9 +254,13 @@ namespace {
         if (token == "depth")          is >> limits.depth;
         else if (token == "nodes")     is >> limits.nodes;
         else if (token == "movetime")  is >> limits.movetime;
+        else if (token == "perft")     limits.perft = depth;
 
     vector<string> fens;
-    iter(pos, limits, (Depth)depth, fens, Options["CentipawnRange"] * PawnValueEg / 100);
+    if (limits.perft)
+        perft_gen(pos, limits.perft * ONE_PLY, fens);
+    else
+        iter(pos, limits, depth * ONE_PLY, fens, Options["CentipawnRange"] * PawnValueEg / 100);
 
     for (size_t i = 0; i < fens.size(); ++i)
         sync_cout << fens[i] + ";" << sync_endl;
