@@ -214,7 +214,12 @@ namespace {
         StateInfo st;
         pos.do_move(m, st);
         if (depth <= ONE_PLY)
-            fens.push_back(pos.fen());
+        {
+            string fen = pos.fen();
+            if (Options["StripMoveCounts"])
+                fen.erase(fen.rfind(" ", fen.rfind(" ") - 1));
+            fens.push_back(fen);
+        }
         else
             iter(pos, limits, depth - ONE_PLY, fens, range * Options["DepthFactor"] / 100);
         pos.undo_move(m);
@@ -229,7 +234,10 @@ namespace {
 
     if (depth < ONE_PLY)
     {
-        fens.push_back(pos.fen());
+        string fen = pos.fen();
+        if (Options["StripMoveCounts"])
+            fen.erase(fen.rfind(" ", fen.rfind(" ") - 1));
+        fens.push_back(fen);
         return ++nodes;
     }
 
