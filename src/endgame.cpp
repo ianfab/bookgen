@@ -115,6 +115,9 @@ Endgames::Endgames() {
 #endif
 #ifdef ATOMIC
   add<ATOMIC_VARIANT, KPK>("KPvK");
+  add<ATOMIC_VARIANT, KNK>("KNvK");
+  add<ATOMIC_VARIANT, KBK>("KBvK");
+  add<ATOMIC_VARIANT, KRK>("KRvK");
   add<ATOMIC_VARIANT, KQK>("KQvK");
   add<ATOMIC_VARIANT, KNNK>("KNNvK");
 #endif
@@ -147,8 +150,8 @@ Value Endgame<CHESS_VARIANT, KXK>::operator()(const Position& pos) const {
   if (   pos.count<QUEEN>(strongSide)
       || pos.count<ROOK>(strongSide)
       ||(pos.count<BISHOP>(strongSide) && pos.count<KNIGHT>(strongSide))
-      ||(pos.count<BISHOP>(strongSide) > 1 && opposite_colors(pos.squares<BISHOP>(strongSide)[0],
-                                                              pos.squares<BISHOP>(strongSide)[1])))
+      || (   (pos.pieces(strongSide, BISHOP) & ~DarkSquares)
+          && (pos.pieces(strongSide, BISHOP) &  DarkSquares)))
       result = std::min(result + VALUE_KNOWN_WIN, VALUE_MATE_IN_MAX_PLY - 1);
 
   return strongSide == pos.side_to_move() ? result : -result;
@@ -958,6 +961,12 @@ Value Endgame<ATOMIC_VARIANT, KPK>::operator()(const Position& pos) const {
 
   return strongSide == pos.side_to_move() ? result : -result;
 }
+
+template<> Value Endgame<ATOMIC_VARIANT, KNK>::operator()(const Position&) const { return VALUE_DRAW; }
+
+template<> Value Endgame<ATOMIC_VARIANT, KBK>::operator()(const Position&) const { return VALUE_DRAW; }
+
+template<> Value Endgame<ATOMIC_VARIANT, KRK>::operator()(const Position&) const { return VALUE_DRAW; }
 
 template<>
 Value Endgame<ATOMIC_VARIANT, KQK>::operator()(const Position& pos) const {

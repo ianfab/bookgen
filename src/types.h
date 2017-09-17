@@ -232,7 +232,7 @@ enum MoveType {
 };
 
 enum Color {
-  WHITE, BLACK, NO_COLOR, COLOR_NB = 2
+  WHITE, BLACK, COLOR_NB = 2
 };
 
 enum CastlingSide {
@@ -293,7 +293,7 @@ enum Value : int {
   VALUE_MATE_IN_MAX_PLY  =  VALUE_MATE - 2 * MAX_PLY,
   VALUE_MATED_IN_MAX_PLY = -VALUE_MATE + 2 * MAX_PLY,
 
-  PawnValueMg   = 188,   PawnValueEg   = 248,
+  PawnValueMg   = 171,   PawnValueEg   = 240,
   KnightValueMg = 764,   KnightValueEg = 848,
   BishopValueMg = 826,   BishopValueEg = 891,
   RookValueMg   = 1282,  RookValueEg   = 1373,

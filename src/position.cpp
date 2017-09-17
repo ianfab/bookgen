@@ -392,7 +392,7 @@ Position& Position::set(const string& fenStr, bool isChess960, Variant v, StateI
   }
 #endif
 
-  // Convert from fullmove starting from 1 to ply starting from 0,
+  // Convert from fullmove starting from 1 to gamePly starting from 0,
   // handle also common incorrect FEN with fullmove = 0.
   gamePly = std::max(2 * (gamePly - 1), 0) + (sideToMove == BLACK);
 
@@ -673,27 +673,6 @@ const string Position::fen() const {
 
 
   return ss.str();
-}
-
-
-/// Position::game_phase() calculates the game phase interpolating total non-pawn
-/// material between endgame and midgame limits.
-
-Phase Position::game_phase() const {
-
-  Value npm = st->nonPawnMaterial[WHITE] + st->nonPawnMaterial[BLACK];
-#ifdef ANTI
-  if (is_anti())
-      npm = 2 * std::min(st->nonPawnMaterial[WHITE], st->nonPawnMaterial[BLACK]);
-#endif
-#ifdef HORDE
-  if (is_horde())
-      return Phase(count<PAWN>(is_horde_color(WHITE) ? WHITE : BLACK) * PHASE_MIDGAME / 36);
-#endif
-
-  npm = std::max(EndgameLimit, std::min(npm, MidgameLimit));
-
-  return Phase(((npm - EndgameLimit) * PHASE_MIDGAME) / (MidgameLimit - EndgameLimit));
 }
 
 
@@ -1073,17 +1052,10 @@ bool Position::gives_check(Move m) const {
 #endif
 
   // Is there a direct check?
-#ifdef CRAZYHOUSE
-  if (st->checkSquares[type_of(is_house() && type_of(m) == DROP ? dropped_piece(m) : piece_on(from))] & to)
-#else
   if (st->checkSquares[type_of(piece_on(from))] & to)
-#endif
       return true;
 
   // Is there a discovered check?
-#ifdef CRAZYHOUSE
-  if (is_house() && type_of(m) == DROP) {} else
-#endif
   if (   (discovered_check_candidates() & from)
       && !aligned(from, to, square<KING>(~sideToMove)))
       return true;
@@ -1118,10 +1090,6 @@ bool Position::gives_check(Move m) const {
       return   (PseudoAttacks[ROOK][rto] & square<KING>(~sideToMove))
             && (attacks_bb<ROOK>(rto, (pieces() ^ kfrom ^ rfrom) | rto | kto) & square<KING>(~sideToMove));
   }
-#ifdef CRAZYHOUSE
-  case DROP:
-      return false;
-#endif
   default:
       assert(false);
       return false;
@@ -1745,10 +1713,11 @@ bool Position::see_ge(Move m, Value threshold) const {
       return true;
 #endif
 
-  // Castling moves are implemented as king capturing the rook so cannot be
-  // handled correctly. Simply assume the SEE value is VALUE_ZERO that is always
-  // correct unless in the rare case the rook ends up under attack.
-  if (type_of(m) == CASTLING)
+  // Only deal with normal moves, assume others pass a simple see
+#ifdef CRAZYHOUSE
+  if (is_house() && type_of(m) == DROP) {} else
+#endif
+  if (type_of(m) != NORMAL)
       return VALUE_ZERO >= threshold;
 
   Square from = from_sq(m), to = to_sq(m);
@@ -1801,38 +1770,23 @@ bool Position::see_ge(Move m, Value threshold) const {
   }
 #endif
 
-  if (type_of(m) == ENPASSANT)
-  {
-      occupied = SquareBB[to - pawn_push(~stm)]; // Remove the captured pawn
-      balance = PieceValue[var][MG][PAWN];
-  }
-  else
-  {
-      balance = PieceValue[var][MG][piece_on(to)];
-      occupied = 0;
-  }
+  balance = PieceValue[var][MG][piece_on(to)];
 
   if (balance < threshold)
       return false;
 
-#ifdef ANTI
-  if (is_anti()) {} else
-#endif
-  if (nextVictim == KING)
-      return true;
-
   balance -= PieceValue[var][MG][nextVictim];
 
-  if (balance >= threshold)
+  if (balance >= threshold) // Always true if nextVictim == KING
       return true;
 
   bool relativeStm = true; // True if the opponent is to move
 #ifdef CRAZYHOUSE
   if (is_house() && type_of(m) == DROP)
-      occupied ^= pieces() ^ to;
+      occupied = pieces() ^ to;
   else
 #endif
-  occupied ^= pieces() ^ from ^ to;
+  occupied = pieces() ^ from ^ to;
 
   // Find all attackers to the destination square, with the moving piece removed,
   // but possibly an X-ray attacker added behind it.
@@ -1900,11 +1854,10 @@ bool Position::is_draw(int ply) const {
   {
       stp = stp->previous->previous;
 
-      // At root position ply is 1, so return a draw score if a position
-      // repeats once earlier but strictly after the root, or repeats twice
-      // before or at the root.
+      // Return a draw score if a position repeats once earlier but strictly
+      // after the root, or repeats twice before or at the root.
       if (   stp->key == st->key
-          && ++cnt + (ply - 1 > i) == 2)
+          && ++cnt + (ply > i) == 2)
           return true;
   }
 

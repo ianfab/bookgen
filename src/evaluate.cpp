@@ -78,7 +78,7 @@ namespace {
 
   public:
     Evaluation() = delete;
-    Evaluation(const Position& p) : pos(p) {};
+    Evaluation(const Position& p) : pos(p) {}
     Evaluation& operator=(const Evaluation&) = delete;
 
     Value value();
@@ -317,8 +317,8 @@ namespace {
   // supported by a pawn. If the minor piece occupies an outpost square
   // then score is doubled.
   const Score Outpost[][2] = {
-    { S(22, 6), S(33, 9) }, // Knight
-    { S( 9, 2), S(14, 4) }  // Bishop
+    { S(22, 6), S(36,12) }, // Knight
+    { S( 9, 2), S(15, 5) }  // Bishop
   };
 
   // RookOnFile[semiopen/open] contains bonuses for each rook when there is no
@@ -367,8 +367,8 @@ namespace {
 #endif
 #ifdef HORDE
     {
-      { V(5), V( 5), V(31), V(73), V(166), V(252) },
-      { V(7), V(14), V(38), V(73), V(166), V(252) }
+      { V(-66), V(-25), V( 66), V(68), V( 72), V(250) },
+      { V( 10), V(  7), V(-12), V(81), V(210), V(258) }
     },
 #endif
 #ifdef KOTH
@@ -513,13 +513,10 @@ namespace {
   const Score ThreatBySafePawn    = S(182,175);
   const Score ThreatByRank        = S( 16,  3);
   const Score Hanging             = S( 48, 27);
+  const Score WeakUnopposedPawn   = S(  5, 25);
   const Score ThreatByPawnPush    = S( 38, 22);
   const Score HinderPassedPawn    = S(  7,  0);
-
-  // Penalty for a bishop on a1/h1 (a8/h8 for black) which is trapped by
-  // a friendly pawn on b2/g2 (b7/g7 for black). This can obviously only
-  // happen in Chess960 games.
-  const Score TrappedBishopA1H1 = S(50, 50);
+  const Score TrappedBishopA1H1   = S( 50, 50);
 
   #undef S
   #undef V
@@ -558,7 +555,7 @@ namespace {
 
   // Per-variant king danger malus factors
   const int KingDangerParams[VARIANT_NB][7] = {
-    {   102,  201,  143, -848,   -9,   40,    0 },
+    {   102,  191,  143, -848,   -9,   40,    0 },
 #ifdef ANTI
     {   101,  235,  134, -717,  -11,   -5,    0 },
 #endif
@@ -839,11 +836,11 @@ namespace {
 
     const Color Them    = (Us == WHITE ? BLACK : WHITE);
     const Square Up     = (Us == WHITE ? NORTH : SOUTH);
-    const Bitboard Camp = (Us == WHITE ? ~Bitboard(0) ^ Rank6BB ^ Rank7BB ^ Rank8BB
-                                       : ~Bitboard(0) ^ Rank1BB ^ Rank2BB ^ Rank3BB);
+    const Bitboard Camp = (Us == WHITE ? AllSquares ^ Rank6BB ^ Rank7BB ^ Rank8BB
+                                       : AllSquares ^ Rank1BB ^ Rank2BB ^ Rank3BB);
 
     const Square ksq = pos.square<KING>(Us);
-    Bitboard kingOnlyDefended, b, b1, b2, safe, other;
+    Bitboard kingOnlyDefended, undefended, b, b1, b2, safe, other;
     int kingDanger;
 
     // King shelter and enemy pawns storm
@@ -870,8 +867,10 @@ namespace {
                           & ~attackedBy2[Us];
 
         // ... and those which are not defended at all in the larger king ring
-        b =  attackedBy[Them][ALL_PIECES] & ~attackedBy[Us][ALL_PIECES]
-           & kingRing[Us] & ~pos.pieces(Them);
+        undefended =   attackedBy[Them][ALL_PIECES]
+                    & ~attackedBy[Us][ALL_PIECES]
+                    &  kingRing[Us]
+                    & ~pos.pieces(Them);
 
         // Initialize the 'kingDanger' variable, which will be transformed
         // later into a king danger score. The initial value is based on the
@@ -881,8 +880,8 @@ namespace {
         const auto KDP = KingDangerParams[pos.variant()];
         kingDanger =           kingAttackersCount[Them] * kingAttackersWeight[Them]
                     + KDP[0] * kingAdjacentZoneAttacksCount[Them]
-                    + KDP[1] * popcount(kingOnlyDefended)
-                    + KDP[2] * (popcount(b) + !!pos.pinned_pieces(Us))
+                    + KDP[1] * popcount(kingOnlyDefended | undefended)
+                    + KDP[2] * !!pos.pinned_pieces(Us)
                     + KDP[3] * !pos.count<QUEEN>(Them)
                     + KDP[4] * mg_value(score) / 8
                     + KDP[5];
@@ -984,6 +983,10 @@ namespace {
             int v = kingDanger * kingDanger / 4096;
 #ifdef CRAZYHOUSE
             if (pos.is_house() && v > QueenValueMg)
+                v = QueenValueMg;
+#endif
+#ifdef THREECHECK
+            if (pos.is_three_check() && v > QueenValueMg)
                 v = QueenValueMg;
 #endif
             score -= make_score(v, kingDanger / 16 + KDP[6] * v / 256);
@@ -1173,6 +1176,10 @@ namespace {
         if (b)
             score += ThreatByKing[more_than_one(b)];
     }
+
+    // Bonus for opponent unopposed weak pawns
+    if (pos.pieces(Us, ROOK, QUEEN))
+        score += WeakUnopposedPawn * pe->weak_unopposed(Them);
 
     // Find squares where our pawns can push on the next move
     b  = shift<Up>(pos.pieces(Us, PAWN)) & ~pos.pieces();
@@ -1385,41 +1392,19 @@ namespace {
                    & ~pos.pieces(Us, PAWN)
                    & ~attackedBy[Them][PAWN]
                    & (attackedBy[Us][ALL_PIECES] | ~attackedBy[Them][ALL_PIECES]);
-#ifdef HORDE
-    if (pos.is_horde())
-        safe =   ~attackedBy[Them][PAWN]
-               & (attackedBy[Us][ALL_PIECES] | ~attackedBy[Them][ALL_PIECES]);
-#endif
 
     // Find all squares which are at most three squares behind some friendly pawn
     Bitboard behind = pos.pieces(Us, PAWN);
     behind |= (Us == WHITE ? behind >>  8 : behind <<  8);
     behind |= (Us == WHITE ? behind >> 16 : behind << 16);
-#ifdef HORDE
-    if (pos.is_horde())
-        behind |= (Us == WHITE ? behind >> 24 : behind << 24);
-#endif
 
     // Since SpaceMask[Us] is fully on our half of the board...
-#ifdef HORDE
-    assert(pos.is_horde() || unsigned(safe >> (Us == WHITE ? 32 : 0)) == 0);
-#else
     assert(unsigned(safe >> (Us == WHITE ? 32 : 0)) == 0);
-#endif
 
     // ...count safe + (behind & safe) with a single popcount.
     int bonus;
-#ifdef HORDE
-    if (pos.is_horde())
-        bonus = popcount(safe) + popcount(behind & safe);
-    else
-#endif
     bonus = popcount((Us == WHITE ? safe << 32 : safe >> 32) | (behind & safe));
     int weight = pos.count<ALL_PIECES>(Us) - 2 * pe->open_files();
-#ifdef HORDE
-    if (pos.is_horde() && pos.is_horde_color(Us))
-        return make_score(bonus * weight * weight / 200, 0);
-#endif
 #ifdef KOTH
     if (pos.is_koth())
         return make_score(bonus * weight * weight / 22, 0)
@@ -1548,10 +1533,10 @@ namespace {
     score += mobility[WHITE] - mobility[BLACK];
 
 #ifdef ANTI
-  if (pos.is_anti()) {} else
+    if (pos.is_anti()) {} else
 #endif
 #ifdef RACE
-  if (pos.is_race()) {} else
+    if (pos.is_race()) {} else
 #endif
     score +=  evaluate_king<WHITE>()
             - evaluate_king<BLACK>();
@@ -1562,15 +1547,18 @@ namespace {
     score +=  evaluate_passed_pawns<WHITE>()
             - evaluate_passed_pawns<BLACK>();
 
+#ifdef HORDE
+    if (pos.is_horde()) {} else
+#endif
     if (pos.non_pawn_material() >= SpaceThreshold[pos.variant()])
         score +=  evaluate_space<WHITE>()
                 - evaluate_space<BLACK>();
 
 #ifdef ANTI
-  if (pos.is_anti()) {} else
+    if (pos.is_anti()) {} else
 #endif
 #ifdef HORDE
-  if (pos.is_horde()) {} else
+    if (pos.is_horde()) {} else
 #endif
     score += evaluate_initiative(eg_value(score));
 

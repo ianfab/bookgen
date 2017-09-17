@@ -43,6 +43,9 @@ enum EndgameCode {
 #endif
 #ifdef ATOMIC
   KQK,
+  KRK,
+  KBK,
+  KNK,
 #endif
   KNNK,  // KNN vs K
   KXK,   // Generic "mate lone king" eval
@@ -93,7 +96,7 @@ template<Variant V, EndgameCode E, typename T = eg_type<V, E>>
 struct Endgame : public EndgameBase<T> {
 
   explicit Endgame(Color c) : EndgameBase<T>(c) {}
-  T operator()(const Position&) const;
+  T operator()(const Position&) const override;
 };
 
 

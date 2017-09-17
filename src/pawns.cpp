@@ -31,104 +31,72 @@ namespace {
   #define V Value
   #define S(mg, eg) make_score(mg, eg)
 
-  // Isolated pawn penalty by opposed flag
-  const Score Isolated[VARIANT_NB][2] = {
-    { S(45, 40), S(30, 27) },
+  // Isolated pawn penalty
+  const Score Isolated[VARIANT_NB] = {
+    S(13, 18),
 #ifdef ANTI
-    { S(50, 80), S(54, 69) },
+    S(54, 69),
 #endif
 #ifdef ATOMIC
-    { S(27, 28), S(24, 14) },
+    S(24, 14),
 #endif
 #ifdef CRAZYHOUSE
-    { S(45, 40), S(30, 27) },
+    S(30, 27),
 #endif
 #ifdef HORDE
-    { S(60, 44), S(18, 38) },
+    S(16, 38),
 #endif
 #ifdef KOTH
-    { S(45, 40), S(30, 27) },
+    S(30, 27),
 #endif
 #ifdef LOSERS
-    { S(50, 80), S(54, 69) },
+    S(54, 69),
 #endif
 #ifdef RACE
-    {},
+    S(0, 0),
 #endif
 #ifdef RELAY
-    { S(45, 40), S(30, 27) },
+    S(30, 27),
 #endif
 #ifdef THREECHECK
-    { S(45, 40), S(30, 27) },
+    S(30, 27),
 #endif
   };
 
-  // Backward pawn penalty by opposed flag
-  const Score Backward[VARIANT_NB][2] = {
-    { S(56, 33), S(41, 19) },
+  // Backward pawn penalty
+  const Score Backward[VARIANT_NB] = {
+    S(24, 12),
 #ifdef ANTI
-    { S(64, 25), S(26, 50) },
+    S(26, 50),
 #endif
 #ifdef ATOMIC
-    { S(48, 21), S(35, 15) },
+    S(35, 15),
 #endif
 #ifdef CRAZYHOUSE
-    { S(56, 33), S(41, 19) },
+    S(41, 19),
 #endif
 #ifdef HORDE
-    { S(48, 26), S(80, 15) },
+    S(78, 14),
 #endif
 #ifdef KOTH
-    { S(56, 33), S(41, 19) },
+    S(41, 19),
 #endif
 #ifdef LOSERS
-    { S(64, 25), S(26, 50) },
+    S(26, 50),
 #endif
 #ifdef RACE
-    {},
+    S(0, 0),
 #endif
 #ifdef RELAY
-    { S(56, 33), S(41, 19) },
+    S(41, 19),
 #endif
 #ifdef THREECHECK
-    { S(56, 33), S(41, 19) },
+    S(41, 19),
 #endif
   };
 
-  // Unsupported pawn penalty for pawns which are neither isolated or backward
-  const Score Unsupported[VARIANT_NB] = {
-    S( 17,   8),
-#ifdef ANTI
-    S(-45, -48),
-#endif
-#ifdef ATOMIC
-    S( 39,   0),
-#endif
-#ifdef CRAZYHOUSE
-    S( 17,   8),
-#endif
-#ifdef HORDE
-    S( 47,  50),
-#endif
-#ifdef KOTH
-    S( 17,   8),
-#endif
-#ifdef LOSERS
-    S(-45, -48),
-#endif
-#ifdef RACE
-    S(  0,   0),
-#endif
-#ifdef RELAY
-    S( 17,   8),
-#endif
-#ifdef THREECHECK
-    S( 17,   8),
-#endif
-  };
-
-  // Connected pawn bonus by opposed, phalanx, twice supported and rank
-  Score Connected[VARIANT_NB][2][2][2][RANK_NB];
+  // Connected pawn bonus by opposed, phalanx, #support and rank
+  Score Connected[VARIANT_NB][2][2][3][RANK_NB];
 
   // Doubled pawn penalty
   const Score Doubled[VARIANT_NB] = {
@@ -143,7 +111,7 @@ namespace {
     S(18, 38),
 #endif
 #ifdef HORDE
-    S(11, 80),
+    S(11, 83),
 #endif
 #ifdef KOTH
     S(18, 38),
@@ -168,56 +136,80 @@ namespace {
     S(17, 16), S(33, 32), S(0, 0), S(0, 0)
   };
 
-  // Weakness of our pawn shelter in front of the king by [distance from edge][rank].
+  // Weakness of our pawn shelter in front of the king by [isKingFile][distance from edge][rank].
   // RANK_1 = 0 is used for files where we have no pawns or our pawn is behind our king.
-  const Value ShelterWeakness[VARIANT_NB][4][RANK_NB] = {
+  const Value ShelterWeakness[VARIANT_NB][2][int(FILE_NB) / 2][RANK_NB] = {
   {
-    { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) },
-    { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
-    { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
-    { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) }
+    { { V( 97), V(17), V( 9), V(44), V( 84), V( 87), V( 99) }, // Not On King file
+      { V(106), V( 6), V(33), V(86), V( 87), V(104), V(112) },
+      { V(101), V( 2), V(65), V(98), V( 58), V( 89), V(115) },
+      { V( 73), V( 7), V(54), V(73), V( 84), V( 83), V(111) } },
+    { { V(104), V(20), V( 6), V(27), V( 86), V( 93), V( 82) }, // On King file
+      { V(123), V( 9), V(34), V(96), V(112), V( 88), V( 75) },
+      { V(120), V(25), V(65), V(91), V( 66), V( 78), V(117) },
+      { V( 81), V( 2), V(47), V(63), V( 94), V( 93), V(104) } }
   },
 #ifdef ANTI
   {},
 #endif
 #ifdef ATOMIC
   {
-    { V( 88), V(34), V( 5), V(44), V( 89), V( 90), V( 94) },
-    { V(116), V(61), V(-4), V(80), V( 95), V(101), V(104) },
-    { V( 97), V(68), V(34), V(82), V( 62), V(104), V(110) },
-    { V(103), V(44), V(44), V(77), V(103), V( 66), V(118) }
+    { { V( 88), V(34), V( 5), V(44), V( 89), V( 90), V( 94) }, // Not On King file
+      { V(116), V(61), V(-4), V(80), V( 95), V(101), V(104) },
+      { V( 97), V(68), V(34), V(82), V( 62), V(104), V(110) },
+      { V(103), V(44), V(44), V(77), V(103), V( 66), V(118) } },
+    { { V( 88), V(34), V( 5), V(44), V( 89), V( 90), V( 94) }, // On King file
+      { V(116), V(61), V(-4), V(80), V( 95), V(101), V(104) },
+      { V( 97), V(68), V(34), V(82), V( 62), V(104), V(110) },
+      { V(103), V(44), V(44), V(77), V(103), V( 66), V(118) } }
   },
 #endif
 #ifdef CRAZYHOUSE
   {
-    { V(238), V( 6), V( 82), V(130), V(120), V(166), V(232) },
-    { V(330), V( 0), V(120), V(184), V(186), V(184), V(192) },
-    { V(196), V( 0), V(156), V(136), V(216), V(196), V(242) },
-    { V(176), V(34), V(112), V(170), V(182), V(194), V(276) }
+    { { V(148), V(  7), V( 84), V(141), V(156), V(177), V(326) }, // Not On King file
+      { V(288), V( -3), V(141), V(216), V(182), V(213), V(162) },
+      { V(190), V( 48), V(140), V(167), V(254), V(186), V(247) },
+      { V(142), V(129), V( 90), V(164), V(141), V(116), V(289) } },
+    { { V(145), V(-56), V( 20), V(134), V(126), V(166), V(309) }, // On King file
+      { V(290), V(  0), V(144), V(222), V(177), V(210), V(161) },
+      { V(205), V( 46), V(118), V(163), V(235), V(165), V(244) },
+      { V(154), V( 84), V( 87), V(188), V(105), V(177), V(275) } }
   },
 #endif
 #ifdef HORDE
   {
-    { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) },
-    { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
-    { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
-    { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) }
+    { { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) }, // Not On King file
+      { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
+      { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
+      { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) } },
+    { { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) }, // On King file
+      { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
+      { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
+      { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) } }
   },
 #endif
 #ifdef KOTH
   {
-    { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) },
-    { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
-    { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
-    { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) }
+    { { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) }, // Not On King file
+      { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
+      { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
+      { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) } },
+    { { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) }, // On King file
+      { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
+      { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
+      { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) } },
   },
 #endif
 #ifdef LOSERS
   {
-    { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) },
-    { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
-    { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
-    { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) }
+    { { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) }, // Not On King file
+      { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
+      { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
+      { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) } },
+    { { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) }, // On King file
+      { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
+      { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
+      { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) } }
   },
 #endif
 #ifdef RACE
@@ -225,18 +217,26 @@ namespace {
 #endif
 #ifdef RELAY
   {
-    { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) },
-    { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
-    { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
-    { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) }
+    { { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) }, // Not On King file
+      { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
+      { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
+      { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) } },
+    { { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) }, // On King file
+      { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
+      { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
+      { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) } }
   },
 #endif
 #ifdef THREECHECK
   {
-    { V(105), V( 1), V(22), V( 52), V(86), V( 89), V( 98) },
-    { V(116), V( 3), V(55), V(109), V(81), V( 97), V( 99) },
-    { V(121), V(23), V(69), V( 93), V(58), V( 88), V(112) },
-    { V( 94), V(11), V(52), V( 67), V(90), V( 85), V(112) }
+    { { V(140), V( 11), V(38), V( 26), V( 99), V( 94), V( 95) }, // Not On King file
+      { V(104), V( 14), V(28), V(128), V( 86), V(107), V(115) },
+      { V(144), V( 59), V(89), V( 97), V( 39), V( 85), V(114) },
+      { V(103), V( 24), V(76), V( 96), V(115), V( 98), V(127) } },
+    { { V(115), V(-16), V(13), V( 38), V(115), V( 76), V( 92) }, // On King file
+      { V(166), V( 20), V(51), V(111), V( 98), V(113), V(114) },
+      { V(102), V( 29), V(76), V( 75), V( 60), V( 99), V( 96) },
+      { V( 89), V( 18), V(44), V(112), V( 77), V(114), V(115) } }
   },
 #endif
   };
@@ -246,58 +246,41 @@ namespace {
   // on the given file, or their pawn is behind our king.
   const Value StormDanger[VARIANT_NB][4][4][RANK_NB] = {
   {
-    { { V( 0),  V(-290), V(-274), V(57), V(41) },  //BlockedByKing
+    { { V( 0),  V(-290), V(-274), V(57), V(41) },  // BlockedByKing
       { V( 0),  V(  60), V( 144), V(39), V(13) },
       { V( 0),  V(  65), V( 141), V(41), V(34) },
       { V( 0),  V(  53), V( 127), V(56), V(14) } },
-    { { V( 4),  V(  73), V( 132), V(46), V(31) },  //Unopposed
+    { { V( 4),  V(  73), V( 132), V(46), V(31) },  // Unopposed
       { V( 1),  V(  64), V( 143), V(26), V(13) },
       { V( 1),  V(  47), V( 110), V(44), V(24) },
       { V( 0),  V(  72), V( 127), V(50), V(31) } },
-    { { V( 0),  V(   0), V(  79), V(23), V( 1) },  //BlockedByPawn
+    { { V( 0),  V(   0), V(  79), V(23), V( 1) },  // BlockedByPawn
       { V( 0),  V(   0), V( 148), V(27), V( 2) },
       { V( 0),  V(   0), V( 161), V(16), V( 1) },
       { V( 0),  V(   0), V( 171), V(22), V(15) } },
-    { { V(22),  V(  45), V( 104), V(62), V( 6) },  //Unblocked
+    { { V(22),  V(  45), V( 104), V(62), V( 6) },  // Unblocked
       { V(31),  V(  30), V(  99), V(39), V(19) },
       { V(23),  V(  29), V(  96), V(41), V(15) },
       { V(21),  V(  23), V( 116), V(41), V(15) } }
   },
 #ifdef ANTI
-  {
-    { { V( 0),  V(-290), V(-274), V(57), V(41) },  //BlockedByKing
-      { V( 0),  V(  60), V( 144), V(39), V(13) },
-      { V( 0),  V(  65), V( 141), V(41), V(34) },
-      { V( 0),  V(  53), V( 127), V(56), V(14) } },
-    { { V( 4),  V(  73), V( 132), V(46), V(31) },  //Unopposed
-      { V( 1),  V(  64), V( 143), V(26), V(13) },
-      { V( 1),  V(  47), V( 110), V(44), V(24) },
-      { V( 0),  V(  72), V( 127), V(50), V(31) } },
-    { { V( 0),  V(   0), V(  79), V(23), V( 1) },  //BlockedByPawn
-      { V( 0),  V(   0), V( 148), V(27), V( 2) },
-      { V( 0),  V(   0), V( 161), V(16), V( 1) },
-      { V( 0),  V(   0), V( 171), V(22), V(15) } },
-    { { V(22),  V(  45), V( 104), V(62), V( 6) },  //Unblocked
-      { V(31),  V(  30), V(  99), V(39), V(19) },
-      { V(23),  V(  29), V(  96), V(41), V(15) },
-      { V(21),  V(  23), V( 116), V(41), V(15) } }
-  },
+  {},
 #endif
 #ifdef ATOMIC
   {
-    { { V(-25),  V(-332), V(-235), V( 79), V( 41) },  //BlockedByKing
+    { { V(-25),  V(-332), V(-235), V( 79), V( 41) },  // BlockedByKing
       { V(-17),  V(  35), V( 206), V(-21), V(-11) },
       { V(-31),  V(  52), V( 103), V( 42), V( 94) },
       { V( -5),  V( 101), V(  67), V( 29), V( 64) } },
-    { { V(-47),  V(  62), V( 114), V( 16), V( 13) },  //Unopposed
+    { { V(-47),  V(  62), V( 114), V( 16), V( 13) },  // Unopposed
       { V( 82),  V(  41), V( 161), V( 48), V( 35) },
       { V( 44),  V(  56), V( 115), V( 17), V( 48) },
       { V(189),  V( 112), V( 202), V( 69), V(186) } },
-    { { V(  1),  V( -56), V(  70), V( -5), V(-42) },  //BlockedByPawn
+    { { V(  1),  V( -56), V(  70), V( -5), V(-42) },  // BlockedByPawn
       { V( -2),  V( -12), V( 145), V( 56), V( 24) },
       { V(-39),  V(  32), V(  98), V( 60), V( -1) },
       { V(-11),  V( -70), V( 194), V( 58), V(138) } },
-    { { V( 27),  V(  -3), V(  91), V(105), V( 27) },  //Unblocked
+    { { V( 27),  V(  -3), V(  91), V(105), V( 27) },  // Unblocked
       { V(128),  V( -27), V(  81), V( 59), V( 27) },
       { V(126),  V(  69), V(  69), V( 33), V(  1) },
       { V(115),  V(  -7), V( 204), V( 74), V( 70) } }
@@ -305,39 +288,39 @@ namespace {
 #endif
 #ifdef CRAZYHOUSE
   {
-    { { V(-34),  V(-366), V(-249), V( 12), V( 80) },  //BlockedByKing
-      { V( -6),  V( 122), V( 158), V( 90), V(  3) },
-      { V( 35),  V(  89), V( 174), V( 87), V( 86) },
-      { V(-77),  V(  17), V( 154), V( 82), V( 99) } },
-    { { V( 71),  V(  67), V( 177), V( 49), V( 28) },  //Unopposed
-      { V(-86),  V( 108), V( 104), V( 86), V( 26) },
-      { V(  8),  V(  20), V( 107), V(137), V( 35) },
-      { V(-95),  V(  69), V( 101), V(-10), V(-43) } },
-    { { V( -8),  V(  75), V( 276), V( 14), V(-71) },  //BlockedByPawn
-      { V(-28),  V( -10), V( 231), V(  8), V( -6) },
-      { V( 59),  V( -14), V( 300), V( 26), V( -3) },
-      { V(-81),  V(   2), V( 104), V( 79), V(-19) } },
-    { { V( 73),  V(  78), V(  88), V( 46), V( 75) },  //Unblocked
-      { V( 35),  V(  48), V( -21), V( 22), V(-52) },
-      { V( 37),  V(  67), V( 122), V(  6), V( 64) },
-      { V( -5),  V(  55), V( 101), V( 61), V( 33) } }
+    { { V( -54),  V(-364), V(-273), V( -2), V( 72) },  // BlockedByKing
+      { V( -35),  V(  99), V( 123), V( 85), V(-25) },
+      { V(   4),  V(  51), V( 136), V(111), V(149) },
+      { V( -55),  V(  26), V( 164), V( 74), V( 67) } },
+    { { V( 106),  V(  88), V( 213), V( 68), V( 47) },  // Unopposed
+      { V( -82),  V( 122), V(  92), V(148), V(  6) },
+      { V(  25),  V(   3), V( 120), V(141), V( 22) },
+      { V(-109),  V(   2), V( 111), V( 26), V(-24) } },
+    { { V(  34),  V(  55), V( 323), V(-12), V(-70) },  // BlockedByPawn
+      { V( -55),  V( -30), V( 227), V( 19), V( 15) },
+      { V(  46),  V(  -9), V( 335), V( 83), V( 66) },
+      { V(-100),  V(  -4), V(  82), V( 75), V(  4) } },
+    { { V(  44),  V(  37), V( 129), V( 41), V( 56) },  // Unblocked
+      { V(  28),  V(  21), V( -11), V( 41), V(-71) },
+      { V(   9),  V( 102), V(  77), V( 33), V( 56) },
+      { V(  -2),  V(  61), V(  51), V( 56), V( -4) } }
   },
 #endif
 #ifdef HORDE
   {
-    { { V(-11),  V(-364), V(-337), V( 43), V( 69) },  //BlockedByKing
+    { { V(-11),  V(-364), V(-337), V( 43), V( 69) },  // BlockedByKing
       { V(-24),  V(   2), V( 133), V(-33), V(-73) },
       { V(  9),  V(  72), V( 152), V( 99), V( 66) },
       { V( 71),  V(  18), V(  38), V( 30), V( 69) } },
-    { { V( 18),  V( -11), V( 131), V( 42), V(114) },  //Unopposed
+    { { V( 18),  V( -11), V( 131), V( 42), V(114) },  // Unopposed
       { V( -4),  V(  63), V( -77), V( 62), V( 28) },
       { V( 66),  V(  82), V(  43), V( 11), V( 95) },
       { V(-12),  V(  45), V(  93), V(110), V( 78) } },
-    { { V( 23),  V(   8), V(  86), V(-30), V(-15) },  //BlockedByPawn
+    { { V( 23),  V(   8), V(  86), V(-30), V(-15) },  // BlockedByPawn
       { V(105),  V(  35), V(  49), V( 78), V(-29) },
       { V(-74),  V( -27), V( 216), V( 25), V( 33) },
       { V(-14),  V(  24), V( 212), V( 80), V( -6) } },
-    { { V(115),  V(  48), V( 103), V(-30), V( -9) },  //Unblocked
+    { { V(115),  V(  48), V( 103), V(-30), V( -9) },  // Unblocked
       { V( 67),  V(  66), V( 157), V( 38), V( 39) },
       { V( 87),  V(  48), V(  27), V(-21), V(-90) },
       { V( -7),  V(  24), V( 101), V( 90), V( 34) } }
@@ -345,19 +328,19 @@ namespace {
 #endif
 #ifdef KOTH
   {
-    { { V( 0),  V(-290), V(-274), V(57), V(41) },  //BlockedByKing
+    { { V( 0),  V(-290), V(-274), V(57), V(41) },  // BlockedByKing
       { V( 0),  V(  60), V( 144), V(39), V(13) },
       { V( 0),  V(  65), V( 141), V(41), V(34) },
       { V( 0),  V(  53), V( 127), V(56), V(14) } },
-    { { V( 4),  V(  73), V( 132), V(46), V(31) },  //Unopposed
+    { { V( 4),  V(  73), V( 132), V(46), V(31) },  // Unopposed
       { V( 1),  V(  64), V( 143), V(26), V(13) },
       { V( 1),  V(  47), V( 110), V(44), V(24) },
       { V( 0),  V(  72), V( 127), V(50), V(31) } },
-    { { V( 0),  V(   0), V(  79), V(23), V( 1) },  //BlockedByPawn
+    { { V( 0),  V(   0), V(  79), V(23), V( 1) },  // BlockedByPawn
       { V( 0),  V(   0), V( 148), V(27), V( 2) },
       { V( 0),  V(   0), V( 161), V(16), V( 1) },
       { V( 0),  V(   0), V( 171), V(22), V(15) } },
-    { { V(22),  V(  45), V( 104), V(62), V( 6) },  //Unblocked
+    { { V(22),  V(  45), V( 104), V(62), V( 6) },  // Unblocked
       { V(31),  V(  30), V(  99), V(39), V(19) },
       { V(23),  V(  29), V(  96), V(41), V(15) },
       { V(21),  V(  23), V( 116), V(41), V(15) } }
@@ -365,19 +348,19 @@ namespace {
 #endif
 #ifdef LOSERS
   {
-    { { V( 0),  V(-290), V(-274), V(57), V(41) },  //BlockedByKing
+    { { V( 0),  V(-290), V(-274), V(57), V(41) },  // BlockedByKing
       { V( 0),  V(  60), V( 144), V(39), V(13) },
       { V( 0),  V(  65), V( 141), V(41), V(34) },
       { V( 0),  V(  53), V( 127), V(56), V(14) } },
-    { { V( 4),  V(  73), V( 132), V(46), V(31) },  //Unopposed
+    { { V( 4),  V(  73), V( 132), V(46), V(31) },  // Unopposed
       { V( 1),  V(  64), V( 143), V(26), V(13) },
       { V( 1),  V(  47), V( 110), V(44), V(24) },
       { V( 0),  V(  72), V( 127), V(50), V(31) } },
-    { { V( 0),  V(   0), V(  79), V(23), V( 1) },  //BlockedByPawn
+    { { V( 0),  V(   0), V(  79), V(23), V( 1) },  // BlockedByPawn
       { V( 0),  V(   0), V( 148), V(27), V( 2) },
       { V( 0),  V(   0), V( 161), V(16), V( 1) },
       { V( 0),  V(   0), V( 171), V(22), V(15) } },
-    { { V(22),  V(  45), V( 104), V(62), V( 6) },  //Unblocked
+    { { V(22),  V(  45), V( 104), V(62), V( 6) },  // Unblocked
       { V(31),  V(  30), V(  99), V(39), V(19) },
       { V(23),  V(  29), V(  96), V(41), V(15) },
       { V(21),  V(  23), V( 116), V(41), V(15) } }
@@ -388,19 +371,19 @@ namespace {
 #endif
 #ifdef RELAY
   {
-    { { V( 0),  V(-290), V(-274), V(57), V(41) },  //BlockedByKing
+    { { V( 0),  V(-290), V(-274), V(57), V(41) },  // BlockedByKing
       { V( 0),  V(  60), V( 144), V(39), V(13) },
       { V( 0),  V(  65), V( 141), V(41), V(34) },
       { V( 0),  V(  53), V( 127), V(56), V(14) } },
-    { { V( 4),  V(  73), V( 132), V(46), V(31) },  //Unopposed
+    { { V( 4),  V(  73), V( 132), V(46), V(31) },  // Unopposed
       { V( 1),  V(  64), V( 143), V(26), V(13) },
       { V( 1),  V(  47), V( 110), V(44), V(24) },
       { V( 0),  V(  72), V( 127), V(50), V(31) } },
-    { { V( 0),  V(   0), V(  79), V(23), V( 1) },  //BlockedByPawn
+    { { V( 0),  V(   0), V(  79), V(23), V( 1) },  // BlockedByPawn
       { V( 0),  V(   0), V( 148), V(27), V( 2) },
       { V( 0),  V(   0), V( 161), V(16), V( 1) },
       { V( 0),  V(   0), V( 171), V(22), V(15) } },
-    { { V(22),  V(  45), V( 104), V(62), V( 6) },  //Unblocked
+    { { V(22),  V(  45), V( 104), V(62), V( 6) },  // Unblocked
       { V(31),  V(  30), V(  99), V(39), V(19) },
       { V(23),  V(  29), V(  96), V(41), V(15) },
       { V(21),  V(  23), V( 116), V(41), V(15) } }
@@ -408,19 +391,19 @@ namespace {
 #endif
 #ifdef THREECHECK
   {
-    { { V(-40),  V(-310), V(-236), V( 86), V(107) },  //BlockedByKing
+    { { V(-40),  V(-310), V(-236), V( 86), V(107) },  // BlockedByKing
       { V( 24),  V(  80), V( 168), V( 38), V( -4) },
       { V( 16),  V( -41), V( 171), V( 63), V( 19) },
       { V( 12),  V(  80), V( 182), V( 36), V(-16) } },
-    { { V( 27),  V( -18), V( 175), V( 31), V( 29) },  //Unopposed
+    { { V( 27),  V( -18), V( 175), V( 31), V( 29) },  // Unopposed
       { V(106),  V(  81), V( 106), V( 86), V( 19) },
       { V( 42),  V(  62), V(  96), V( 84), V( 40) },
       { V(129),  V(  73), V( 124), V(103), V( 80) } },
-    { { V(-15),  V(   9), V( -73), V(-15), V(-41) },  //BlockedByPawn
+    { { V(-15),  V(   9), V( -73), V(-15), V(-41) },  // BlockedByPawn
       { V(-28),  V(  28), V(  66), V( 25), V( -2) },
       { V(-38),  V( -30), V( 147), V( 24), V( 29) },
       { V(-30),  V(  39), V( 188), V(114), V( 63) } },
-    { { V( 56),  V(  89), V(  34), V( -6), V(-54) },  //Unblocked
+    { { V( 56),  V(  89), V(  34), V( -6), V(-54) },  // Unblocked
       { V( 80),  V( 123), V( 189), V( 83), V(-32) },
       { V( 89),  V(  26), V( 128), V(112), V( 78) },
       { V(166),  V(  29), V( 202), V( 18), V(109) } }
@@ -433,7 +416,7 @@ namespace {
   const Value MaxSafetyBonus = V(258);
 
 #ifdef HORDE
-  const Score ImbalancedHorde = S(40, 36);
+  const Score ImbalancedHorde = S(49, 39);
 #endif
 
   #undef S
@@ -448,7 +431,7 @@ namespace {
     const Square Left  = (Us == WHITE ? NORTH_WEST : SOUTH_EAST);
 
     Bitboard b, neighbours, stoppers, doubled, supported, phalanx;
-    Bitboard lever, leverPush, connected;
+    Bitboard lever, leverPush;
     Square s;
     bool opposed, backward;
     Score score = SCORE_ZERO;
@@ -457,7 +440,7 @@ namespace {
     Bitboard ourPawns   = pos.pieces(  Us, PAWN);
     Bitboard theirPawns = pos.pieces(Them, PAWN);
 
-    e->passedPawns[Us]   = e->pawnAttacksSpan[Us] = 0;
+    e->passedPawns[Us] = e->pawnAttacksSpan[Us] = e->weakUnopposed[Us] = 0;
     e->semiopenFiles[Us] = 0xFF;
     e->kingSquares[Us]   = SQ_NONE;
     e->pawnAttacks[Us]   = shift<Right>(ourPawns) | shift<Left>(ourPawns);
@@ -500,12 +483,11 @@ namespace {
         neighbours = ourPawns   & adjacent_files_bb(f);
         phalanx    = neighbours & rank_bb(s);
 #ifdef HORDE
-        if (pos.is_horde() && rank_of(s) == RANK_1)
-            supported = false;
+        if (pos.is_horde() && relative_rank(Us, s) == RANK_1)
+            supported = 0;
         else
 #endif
         supported  = neighbours & rank_bb(s - Up);
-        connected  = supported | phalanx;
 
         // A pawn is backward when it is behind all pawns of the same color on the
         // adjacent files and cannot be safely advanced.
@@ -521,7 +503,7 @@ namespace {
             // stopper on adjacent file which controls the way to that rank.
             backward = (b | shift<Up>(b & adjacent_files_bb(f))) & stoppers;
 
-            assert(!backward || !(pawn_attack_span(Them, s + Up) & neighbours));
+            assert(!(backward && (forward_ranks_bb(Them, s + Up) & neighbours)));
         }
 
         // Passed pawns will be properly scored in evaluation because we need
@@ -544,20 +526,17 @@ namespace {
         }
 
         // Score this pawn
-        if (!neighbours)
-            score -= Isolated[pos.variant()][opposed];
-
-        else if (backward)
-            score -= Backward[pos.variant()][opposed];
-
-        else if (!supported)
-            score -= Unsupported[pos.variant()];
-
 #ifdef HORDE
         if (pos.is_horde() && relative_rank(Us, s) == 0) {} else
 #endif
-        if (connected)
-            score += Connected[pos.variant()][opposed][!!phalanx][more_than_one(supported)][relative_rank(Us, s)];
+        if (supported | phalanx)
+            score += Connected[pos.variant()][opposed][!!phalanx][popcount(supported)][relative_rank(Us, s)];
+
+        else if (!neighbours)
+            score -= Isolated[pos.variant()], e->weakUnopposed[Us] += !opposed;
+
+        else if (backward)
+            score -= Backward[pos.variant()], e->weakUnopposed[Us] += !opposed;
 
 #ifdef HORDE
         if (doubled && (!supported || pos.is_horde()))
@@ -584,7 +563,7 @@ namespace Pawns {
 void init() {
 
   static const int Seed[VARIANT_NB][RANK_NB] = {
-    { 0, 8, 19, 13, 71, 94, 169, 324 },
+    { 0, 13, 24, 18, 76, 100, 175, 330 },
 #ifdef ANTI
     { 0, 8, 19, 13, 71, 94, 169, 324 },
 #endif
@@ -595,7 +574,7 @@ void init() {
     { 0, 8, 19, 13, 71, 94, 169, 324 },
 #endif
 #ifdef HORDE
-    { 38, 31, 3, 1, 117, 101, 335, 329 },
+    { 37, 29, 3, 1, 105,  99, 343, 350 },
 #endif
 #ifdef KOTH
     { 0, 8, 19, 13, 71, 94, 169, 324 },
@@ -617,12 +596,13 @@ void init() {
   for (Variant var = CHESS_VARIANT; var < VARIANT_NB; ++var)
   for (int opposed = 0; opposed <= 1; ++opposed)
       for (int phalanx = 0; phalanx <= 1; ++phalanx)
-          for (int apex = 0; apex <= 1; ++apex)
+          for (int support = 0; support <= 2; ++support)
               for (Rank r = RANK_2; r < RANK_8; ++r)
   {
-      int v = (Seed[var][r] + (phalanx ? (Seed[var][r + 1] - Seed[var][r]) / 2 : 0)) >> opposed;
-      v += (apex ? v / 2 : 0);
-      Connected[var][opposed][phalanx][apex][r] = make_score(v, v * (r-2) / 4);
+      int v = 17 * support;
+      v += (Seed[var][r] + (phalanx ? (Seed[var][r + 1] - Seed[var][r]) / 2 : 0)) >> opposed;
+
+      Connected[var][opposed][phalanx][support][r] = make_score(v, v * (r - 2) / 4);
   }
 }
 
@@ -673,7 +653,7 @@ Value Entry::shelter_storm(const Position& pos, Square ksq) {
       Rank rkThem = b ? relative_rank(Us, frontmost_sq(Them, b)) : RANK_1;
 
       int d = std::min(f, FILE_H - f);
-      safety -=  ShelterWeakness[pos.variant()][d][rkUs]
+      safety -=  ShelterWeakness[pos.variant()][f == file_of(ksq)][d][rkUs]
                + StormDanger[pos.variant()]
                  [f == file_of(ksq) && rkThem == relative_rank(Us, ksq) + 1 ? BlockedByKing  :
                   rkUs   == RANK_1                                          ? Unopposed :
@@ -708,6 +688,10 @@ Score Entry::do_king_safety(const Position& pos, Square ksq) {
   if (pos.can_castle(MakeCastling<Us, QUEEN_SIDE>::right))
       bonus = std::max(bonus, shelter_storm<Us>(pos, relative_square(Us, SQ_C1)));
 
+#ifdef CRAZYHOUSE
+  if (pos.is_house())
+      return make_score(bonus, bonus);
+#endif
   return make_score(bonus, -16 * minKingPawnDistance);
 }
 

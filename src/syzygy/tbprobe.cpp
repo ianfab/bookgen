@@ -625,6 +625,10 @@ public:
 #ifndef _WIN32
         struct stat statbuf;
         int fd = ::open(fname.c_str(), O_RDONLY);
+
+        if (fd == -1)
+            return *baseAddress = nullptr, nullptr;
+
         fstat(fd, &statbuf);
         *mapping = statbuf.st_size;
         *baseAddress = mmap(nullptr, statbuf.st_size, PROT_READ, MAP_SHARED, fd, 0);
@@ -637,6 +641,10 @@ public:
 #else
         HANDLE fd = CreateFile(fname.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+
+        if (fd == INVALID_HANDLE_VALUE)
+            return *baseAddress = nullptr, nullptr;
+
         DWORD size_high;
         DWORD size_low = GetFileSize(fd, &size_high);
         HANDLE mmap = CreateFileMapping(fd, nullptr, PAGE_READONLY, size_high, size_low, nullptr);
@@ -664,8 +672,7 @@ public:
             || *data++ != *TB_MAGIC) {
             std::cerr << "Corrupted table in file " << fname << std::endl;
             unmap(*baseAddress, *mapping);
-            *baseAddress = nullptr;
-            return nullptr;
+            return *baseAddress = nullptr, nullptr;
         }
 
         return data;
@@ -776,32 +783,29 @@ void HashTable::insert(const std::vector<PieceType>& w, const std::vector<PieceT
 
     for (PieceType pt : w)
         code += PieceToChar[pt];
-
     code += "v";
-
     for (PieceType pt: b)
         code += PieceToChar[pt];
 
     TBFile file(code + WdlSuffixes[variant]);
 
-    if (file.is_open())
+    if (file.is_open()) // Only WDL file is checked
         file.close();
-    else {
-        if (code.find("P") == std::string::npos && PawnlessWdlSuffixes[variant]) {
-            TBFile pawnlessFile(code + PawnlessWdlSuffixes[variant]);
-            if (!pawnlessFile.is_open())
-                return;
-
-            pawnlessFile.close();
-        }
-        else
+    else if (variant != CHESS_VARIANT && code.find("P") == std::string::npos &&
+             PawnlessWdlSuffixes[variant])
+    {
+        TBFile pawnlessFile(code + PawnlessWdlSuffixes[variant]);
+        if (!pawnlessFile.is_open()) // Only WDL file is checked
             return;
+        pawnlessFile.close();
     }
+    else
+        return;
 
     MaxCardinality = std::max((int)(w.size() + b.size()), MaxCardinality);
 
-    wdlTable.push_back(WDLEntry(code, variant));
-    dtzTable.push_back(DTZEntry(wdlTable.back()));
+    wdlTable.emplace_back(code, variant);
+    dtzTable.emplace_back(wdlTable.back());
 
     insert(wdlTable.back().key , &wdlTable.back(), &dtzTable.back());
     insert(wdlTable.back().key2, &wdlTable.back(), &dtzTable.back());
@@ -1716,7 +1720,7 @@ void* init(Entry& e, const Position& pos) {
     fname = e.key == pos.material_key() ? w + 'v' + b : b + 'v' + w;
 
     const char** Suffixes = IsWDL ? WdlSuffixes : DtzSuffixes;
-    const char** PawnlessSuffixes =  IsWDL ? PawnlessWdlSuffixes : PawnlessDtzSuffixes;
+    const char** PawnlessSuffixes = IsWDL ? PawnlessWdlSuffixes : PawnlessDtzSuffixes;
 
     uint8_t* data = nullptr;
     TBFile file(fname + Suffixes[e.variant]);
