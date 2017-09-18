@@ -272,13 +272,63 @@ namespace {
 
   }
 
-  void filter(set<string>& fens) {
+  void filter(istringstream& is, set<string>& fens) {
+
+    Search::LimitsType limits;
+    string token;
+
+    while (is >> token)
+        if (token == "depth")          is >> limits.depth;
+        else if (token == "nodes")     is >> limits.nodes;
+        else if (token == "movetime")  is >> limits.movetime;
+
+    StateListPtr states;
+    Position pos;
     set<string> filtered_fens;
+
     for (const auto& fen : fens)
     {
-        //TODO: filter positions
-        if (true)
-            filtered_fens.insert(fen);
+        limits.startTime = now();
+        states = StateListPtr(new std::deque<StateInfo>(1));
+        pos.set(fen, Options["UCI_Chess960"], UCI::variant_from_name(Options["UCI_Variant"]), &states->back(), Threads.main());
+        Threads.start_thinking(pos, states, limits);
+        Threads.main()->wait_for_search_finished();
+
+        const Search::RootMoves& rootMoves = pos.this_thread()->rootMoves;
+        size_t PVIdx = pos.this_thread()->PVIdx;
+        size_t multiPV = std::min((size_t)Options["MultiPV"], rootMoves.size());
+
+        Value range     = Options["MoveScoreRange"] * PawnValueEg / 100;
+        Value abs_range = Options["AbsScoreRange"]  * PawnValueEg / 100;
+        Value bias      = Options["AbsScoreBias"]   * PawnValueEg / 100;
+        Value v, v0;
+        bool exclude = false;
+
+        for (size_t i = 0; i < multiPV; ++i)
+        {
+            bool updated = (i <= PVIdx);
+
+            v = updated ? rootMoves[i].score : rootMoves[i].previousScore;
+            if (i == 0)
+            {
+                if (std::abs((pos.side_to_move() == WHITE? v : -v) - bias) > abs_range)
+                {
+                    exclude = true;
+                    break;
+                }
+                v0 = v;
+            }
+            else if (v0 - v >= range)
+            {
+                exclude = true;
+                break;
+            }
+        }
+
+        if (exclude)
+            continue;
+
+        filtered_fens.insert(fen);
     }
     fens = filtered_fens;
   }
@@ -380,7 +430,7 @@ void UCI::loop(int argc, char* argv[]) {
 
       // Book generation commands
       else if (token == "generate")   generate(pos, is, fens);
-      else if (token == "filter")     filter(fens);
+      else if (token == "filter")     filter(is, fens);
       else if (token == "print")      print(fens);
       else if (token == "clear")      fens.clear();
       else if (token == "size")       sync_cout << fens.size() << sync_endl;
