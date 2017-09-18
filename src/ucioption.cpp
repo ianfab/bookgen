@@ -63,7 +63,7 @@ void init(OptionsMap& o) {
   o["AbsScoreBias"]          << Option(0, -1000, 1000);
   o["DepthFactor"]           << Option(100, 0, 200);
   o["TrimFEN"]               << Option(true);
-  o["EPDPath"]               << Option("<empty>");
+  o["EPDPath"]               << Option("book.epd");
   o["Contempt"]              << Option(0, -100, 100);
   o["Threads"]               << Option(1, 1, 512, on_threads);
   o["Hash"]                  << Option(16, 1, MaxHashMB, on_hash_size);

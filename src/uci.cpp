@@ -21,6 +21,7 @@
 #include <cassert>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <string>
 #include <set>
 
@@ -338,6 +339,12 @@ namespace {
         sync_cout << fen << sync_endl;
   }
 
+  void save(set<string>& fens) {
+    ofstream file(Options["EPDPath"]);
+    for (const auto& fen : fens)
+        file << fen << endl;
+  }
+
   // bench() is called when engine receives the "bench" command. Firstly
   // a list of UCI commands is setup according to bench parameters, then
   // it is run one by one printing a summary at the end.
@@ -431,9 +438,10 @@ void UCI::loop(int argc, char* argv[]) {
       // Book generation commands
       else if (token == "generate")   generate(pos, is, fens);
       else if (token == "filter")     filter(is, fens);
-      else if (token == "print")      print(fens);
       else if (token == "clear")      fens.clear();
       else if (token == "size")       sync_cout << fens.size() << sync_endl;
+      else if (token == "print")      print(fens);
+      else if (token == "save")       save(fens);
 
       else if (token == "setoption")  setoption(is);
       else if (token == "go")         go(pos, is, states);
