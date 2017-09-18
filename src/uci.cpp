@@ -22,6 +22,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <set>
 
 #include "evaluate.h"
 #include "movegen.h"
@@ -180,7 +181,7 @@ namespace {
     Threads.start_thinking(pos, states, limits, ponderMode);
   }
 
-  void iter(Position& pos, Search::LimitsType limits, Depth depth, vector<string>& fens, Value range) {
+  void iter(Position& pos, Search::LimitsType limits, Depth depth, set<string>& fens, Value range) {
 
     limits.startTime = now();
     StateListPtr states(new std::deque<StateInfo>(1));
@@ -218,7 +219,7 @@ namespace {
             string fen = pos.fen();
             if (Options["StripMoveCounts"])
                 fen.erase(fen.rfind(" ", fen.rfind(" ") - 1));
-            fens.push_back(fen);
+            fens.insert(fen);
         }
         else
             iter(pos, limits, depth - ONE_PLY, fens, range * Options["DepthFactor"] / 100);
@@ -227,7 +228,7 @@ namespace {
 
   }
 
-  uint64_t perft_gen(Position& pos, Depth depth, vector<string>& fens) {
+  uint64_t perft_gen(Position& pos, Depth depth, set<string>& fens) {
 
     StateInfo st;
     uint64_t nodes = 0;
@@ -237,7 +238,7 @@ namespace {
         string fen = pos.fen();
         if (Options["StripMoveCounts"])
             fen.erase(fen.rfind(" ", fen.rfind(" ") - 1));
-        fens.push_back(fen);
+        fens.insert(fen);
         return ++nodes;
     }
 
@@ -250,7 +251,7 @@ namespace {
     return nodes;
   }
 
-  void generate(Position& pos, istringstream& is, vector<string>& fens) {
+  void generate(Position& pos, istringstream& is, set<string>& fens) {
 
     Search::LimitsType limits;
     string token;
@@ -271,9 +272,9 @@ namespace {
 
   }
 
-  void print(vector<string>& fens) {
-    for (size_t i = 0; i < fens.size(); ++i)
-        sync_cout << fens[i] << sync_endl;
+  void print(set<string>& fens) {
+    for (const auto& fen : fens)
+        sync_cout << fen << sync_endl;
   }
 
   // bench() is called when engine receives the "bench" command. Firstly
@@ -332,7 +333,7 @@ void UCI::loop(int argc, char* argv[]) {
   string token, cmd;
   StateListPtr states(new std::deque<StateInfo>(1));
   auto uiThread = std::make_shared<Thread>(0);
-  vector<string> fens;
+  set<string> fens;
 
   pos.set(StartFENs[CHESS_VARIANT], false, CHESS_VARIANT, &states->back(), uiThread.get());
 
@@ -370,6 +371,7 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "generate")   generate(pos, is, fens);
       else if (token == "print")      print(fens);
       else if (token == "clear")      fens.clear();
+      else if (token == "size")       sync_cout << fens.size() << sync_endl;
 
       else if (token == "setoption")  setoption(is);
       else if (token == "go")         go(pos, is, states);
