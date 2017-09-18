@@ -181,7 +181,7 @@ namespace {
     Threads.start_thinking(pos, states, limits, ponderMode);
   }
 
-  void iter(Position& pos, Search::LimitsType limits, Depth depth, set<string>& fens, Value range) {
+  void multipv_gen(Position& pos, Search::LimitsType limits, Depth depth, set<string>& fens, Value range) {
 
     limits.startTime = now();
     StateListPtr states(new std::deque<StateInfo>(1));
@@ -217,12 +217,12 @@ namespace {
         if (depth <= ONE_PLY)
         {
             string fen = pos.fen();
-            if (Options["StripMoveCounts"])
+            if (Options["TrimFEN"])
                 fen.erase(fen.rfind(" ", fen.rfind(" ") - 1));
             fens.insert(fen);
         }
         else
-            iter(pos, limits, depth - ONE_PLY, fens, range * Options["DepthFactor"] / 100);
+            multipv_gen(pos, limits, depth - ONE_PLY, fens, range * Options["DepthFactor"] / 100);
         pos.undo_move(m);
     }
 
@@ -236,7 +236,7 @@ namespace {
     if (depth < ONE_PLY)
     {
         string fen = pos.fen();
-        if (Options["StripMoveCounts"])
+        if (Options["TrimFEN"])
             fen.erase(fen.rfind(" ", fen.rfind(" ") - 1));
         fens.insert(fen);
         return ++nodes;
@@ -268,8 +268,19 @@ namespace {
     if (limits.perft)
         perft_gen(pos, limits.perft * ONE_PLY, fens);
     else
-        iter(pos, limits, depth * ONE_PLY, fens, Options["CentipawnRange"] * PawnValueEg / 100);
+        multipv_gen(pos, limits, depth * ONE_PLY, fens, Options["MoveScoreRange"] * PawnValueEg / 100);
 
+  }
+
+  void filter(set<string>& fens) {
+    set<string> filtered_fens;
+    for (const auto& fen : fens)
+    {
+        //TODO: filter positions
+        if (true)
+            filtered_fens.insert(fen);
+    }
+    fens = filtered_fens;
   }
 
   void print(set<string>& fens) {
@@ -369,6 +380,7 @@ void UCI::loop(int argc, char* argv[]) {
 
       // Book generation commands
       else if (token == "generate")   generate(pos, is, fens);
+      else if (token == "filter")     filter(fens);
       else if (token == "print")      print(fens);
       else if (token == "clear")      fens.clear();
       else if (token == "size")       sync_cout << fens.size() << sync_endl;

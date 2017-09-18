@@ -58,9 +58,12 @@ void init(OptionsMap& o) {
   const int MaxHashMB = Is64Bit ? 1024 * 1024 : 2048;
 
   o["Debug Log File"]        << Option("", on_logger);
-  o["CentipawnRange"]        << Option(30, 0, 200);
+  o["MoveScoreRange"]        << Option(30, 0, 1000);
+  o["AbsScoreRange"]         << Option(30, 0, 1000);
+  o["AbsScoreBias"]          << Option(0, -1000, 1000);
   o["DepthFactor"]           << Option(100, 0, 200);
-  o["StripMoveCounts"]       << Option(true);
+  o["TrimFEN"]               << Option(true);
+  o["EPDPath"]               << Option("<empty>");
   o["Contempt"]              << Option(0, -100, 100);
   o["Threads"]               << Option(1, 1, 512, on_threads);
   o["Hash"]                  << Option(16, 1, MaxHashMB, on_hash_size);
