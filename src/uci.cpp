@@ -196,6 +196,8 @@ namespace {
     const Search::RootMoves& rootMoves = pos.this_thread()->rootMoves;
     size_t PVIdx = pos.this_thread()->PVIdx;
     size_t multiPV = std::min((size_t)Options["MultiPV"], rootMoves.size());
+    Value bias = Options["AbsScoreBias"] * PawnValueEg / 100;
+    bool abs_move_score = Options["AbsMoveScore"];
 
     Value v0;
 
@@ -207,7 +209,8 @@ namespace {
         if (i == 0)
             v0 = v;
 
-        if (v0 - v < range)
+        if (abs_move_score ? std::abs((pos.side_to_move() == WHITE? v : -v) - bias) <= range
+                           : v0 - v <= range)
             good_moves.push_back(rootMoves[i].pv[0]);
     }
 
@@ -287,6 +290,11 @@ namespace {
     Position pos;
     set<string> filtered_fens;
 
+    Value range         = Options["MoveScoreRange"] * PawnValueEg / 100;
+    Value abs_range     = Options["AbsScoreRange"]  * PawnValueEg / 100;
+    Value bias          = Options["AbsScoreBias"]   * PawnValueEg / 100;
+    bool abs_move_score = Options["AbsMoveScore"];
+
     for (const auto& fen : fens)
     {
         limits.startTime = now();
@@ -299,9 +307,7 @@ namespace {
         size_t PVIdx = pos.this_thread()->PVIdx;
         size_t multiPV = std::min((size_t)Options["MultiPV"], rootMoves.size());
 
-        Value range     = Options["MoveScoreRange"] * PawnValueEg / 100;
-        Value abs_range = Options["AbsScoreRange"]  * PawnValueEg / 100;
-        Value bias      = Options["AbsScoreBias"]   * PawnValueEg / 100;
+
         Value v, v0;
         bool exclude = false;
 
@@ -319,7 +325,8 @@ namespace {
                 }
                 v0 = v;
             }
-            else if (v0 - v >= range)
+            else if (abs_move_score ? std::abs((pos.side_to_move() == WHITE? v : -v) - bias) > range
+                                    : v0 - v > range)
             {
                 exclude = true;
                 break;

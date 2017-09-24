@@ -62,6 +62,7 @@ void init(OptionsMap& o) {
   o["AbsScoreRange"]         << Option(100, 0, 1000);
   o["AbsScoreBias"]          << Option(0, -1000, 1000);
   o["DepthFactor"]           << Option(100, 0, 200);
+  o["AbsMoveScore"]          << Option(false);
   o["TrimFEN"]               << Option(true);
   o["EPDPath"]               << Option("book.epd");
   o["Contempt"]              << Option(0, -100, 100);
