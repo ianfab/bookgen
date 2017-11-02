@@ -79,6 +79,9 @@ namespace {
 #ifdef CRAZYHOUSE
   { 0, 590, 651, 622 },
 #endif
+#ifdef EXTINCTION
+  { 0, 570, 603, 554 },
+#endif
 #ifdef HORDE
   { 0, 706, 625, 555 },
 #endif
@@ -97,6 +100,9 @@ namespace {
 #ifdef THREECHECK
   { 0, 2060, 2257, 2174 },
 #endif
+#ifdef TWOKINGS
+  { 0, 570, 603, 554 },
+#endif
   };
   const int futility_margin_factor[VARIANT_NB] = {
   150,
@@ -108,6 +114,9 @@ namespace {
 #endif
 #ifdef CRAZYHOUSE
   125,
+#endif
+#ifdef EXTINCTION
+  150,
 #endif
 #ifdef HORDE
   151,
@@ -127,6 +136,9 @@ namespace {
 #ifdef THREECHECK
   223,
 #endif
+#ifdef TWOKINGS
+  150,
+#endif
   };
   Value futility_margin(Variant var, Depth d) { return Value(futility_margin_factor[var] * d / ONE_PLY); }
   const int futility_margin_parent[VARIANT_NB][2] = {
@@ -138,6 +150,9 @@ namespace {
   { 512, 400 },
 #endif
 #ifdef CRAZYHOUSE
+  { 256, 200 },
+#endif
+#ifdef EXTINCTION
   { 256, 200 },
 #endif
 #ifdef HORDE
@@ -158,6 +173,9 @@ namespace {
 #ifdef THREECHECK
   { 420, 332 },
 #endif
+#ifdef TWOKINGS
+  { 256, 200 },
+#endif
   };
   const int probcut_margin[VARIANT_NB] = {
   200,
@@ -168,6 +186,9 @@ namespace {
   200,
 #endif
 #ifdef CRAZYHOUSE
+  200,
+#endif
+#ifdef EXTINCTION
   200,
 #endif
 #ifdef HORDE
@@ -188,6 +209,9 @@ namespace {
 #ifdef THREECHECK
   418,
 #endif
+#ifdef TWOKINGS
+  200,
+#endif
   };
 
   // Futility and reductions lookup tables, initialized at startup
@@ -207,10 +231,9 @@ namespace {
 #ifdef SKILL
   // Skill structure is used to implement strength limit
   struct Skill {
-    Skill(int l) : level(l) {}
+    explicit Skill(int l) : level(l) {}
     bool enabled() const { return level < 20; }
     bool time_to_pick(Depth depth) const { return depth / ONE_PLY == 1 + level; }
-    Move best_move(size_t multiPV) { return best ? best : pick_best(multiPV); }
     Move pick_best(size_t multiPV);
 
     int level;
@@ -271,6 +294,7 @@ namespace {
   void update_pv(Move* pv, Move move, Move* childPv);
   void update_continuation_histories(Stack* ss, Piece pc, Square to, int bonus);
   void update_stats(const Position& pos, Stack* ss, Move move, Move* quiets, int quietsCnt, int bonus);
+  bool pv_is_draw(Position& pos);
 
   // perft() is our utility to verify move generation. All the leaf nodes up
   // to the given depth are generated and counted, and the sum is returned.
@@ -403,11 +427,6 @@ void MainThread::search() {
       Thread::search(); // Let's start searching!
   }
 
-  // When playing in 'nodes as time' mode, subtract the searched nodes from
-  // the available ones before exiting.
-  if (Limits.npmsec)
-      Time.availableNodes += Limits.inc[us] - Threads.nodes_searched();
-
   // When we reach the maximum depth, we can arrive here without a raise of
   // Threads.stop. However, if we are pondering or in an infinite search,
   // the UCI protocol states that we shouldn't print the best move before the
@@ -426,6 +445,11 @@ void MainThread::search() {
   for (Thread* th : Threads)
       if (th != this)
           th->wait_for_search_finished();
+
+  // When playing in 'nodes as time' mode, subtract the searched nodes from
+  // the available ones before exiting.
+  if (Limits.npmsec)
+      Time.availableNodes += Limits.inc[us] - Threads.nodes_searched();
 
   // Check if there are threads with a better score than main thread
   Thread* bestThread = this;
@@ -682,11 +706,17 @@ void Thread::search() {
               // from the previous search and just did a fast verification.
               const int F[] = { mainThread->failedLow,
                                 bestValue - mainThread->previousScore };
-
               int improvingFactor = std::max(229, std::min(715, 357 + 119 * F[0] - 6 * F[1]));
-              double unstablePvFactor = 1 + mainThread->bestMoveChanges;
+
+              Color us = rootPos.side_to_move();
+              bool thinkHard =    DrawValue[us] == bestValue
+                               && Limits.time[us] - Time.elapsed() > Limits.time[~us]
+                               && ::pv_is_draw(rootPos);
+
+              double unstablePvFactor = 1 + mainThread->bestMoveChanges + thinkHard;
 
               bool doEasyMove =   rootMoves[0].pv[0] == easyMove
+                               && !thinkHard
                                && mainThread->bestMoveChanges < 0.03
                                && Time.elapsed() > Time.optimum() * 5 / 44;
 
@@ -721,8 +751,8 @@ void Thread::search() {
 #ifdef SKILL
   // If skill level is enabled, swap best PV line with the sub-optimal one
   if (skill.enabled())
-      std::swap(rootMoves[0], *std::find(rootMoves.begin(),
-                rootMoves.end(), skill.best_move(multiPV)));
+      std::swap(rootMoves[0], *std::find(rootMoves.begin(), rootMoves.end(),
+                skill.best ? skill.best : skill.pick_best(multiPV)));
 #endif
 }
 
@@ -751,7 +781,7 @@ namespace {
     Depth extension, newDepth;
     Value bestValue, value, ttValue, eval;
     bool ttHit, inCheck, givesCheck, singularExtensionNode, improving;
-    bool captureOrPromotion, doFullDepthSearch, moveCountPruning, skipQuiets, ttCapture;
+    bool captureOrPromotion, doFullDepthSearch, moveCountPruning, skipQuiets, ttCapture, pvExact;
     Piece movedPiece;
     int moveCount, quietCount;
 
@@ -842,6 +872,9 @@ namespace {
     }
 
     // Step 4a. Tablebase probe
+#ifdef EXTINCTION
+    if (pos.is_extinction()) {} else
+#endif
 #ifdef KOTH
     if (pos.is_koth()) {} else
 #endif
@@ -853,6 +886,9 @@ namespace {
 #endif
 #ifdef THREECHECK
     if (pos.is_three_check()) {} else
+#endif
+#ifdef TWOKINGS
+    if (pos.is_two_kings()) {} else
 #endif
 #ifdef HORDE
     if (pos.is_horde()) {} else
@@ -967,6 +1003,14 @@ namespace {
 
         // Null move dynamic reduction based on depth and value
         Depth R = ((823 + 67 * depth / ONE_PLY) / 256 + std::min((eval - beta) / PawnValueMg, 3)) * ONE_PLY;
+#ifdef ANTI
+        if (pos.is_anti())
+            R = ((823 + 67 * depth / ONE_PLY) / 256 + std::min((eval - beta) / (2 * PawnValueMg), 3)) * ONE_PLY;
+#endif
+#ifdef ATOMIC
+        if (pos.is_atomic())
+            R = ((823 + 67 * depth / ONE_PLY) / 256 + std::min((eval - beta) / (2 * PawnValueMg), 3)) * ONE_PLY;
+#endif
 
         ss->currentMove = MOVE_NULL;
         ss->contHistory = &thisThread->contHistory[NO_PIECE][0];
@@ -1061,6 +1105,7 @@ moves_loop: // When in check search starts from here
                            &&  tte->depth() >= depth - 3 * ONE_PLY;
     skipQuiets = false;
     ttCapture = false;
+    pvExact = PvNode && ttHit && tte->bound() == BOUND_EXACT;
 
     // Step 11. Loop through moves
     // Loop through all pseudo-legal moves until no moves remain or a beta cutoff occurs
@@ -1188,9 +1233,6 @@ moves_loop: // When in check search starts from here
 #ifdef ANTI
               if (pos.is_anti()) {} else
 #endif
-#ifdef RACE
-              if (pos.is_race()) {} else
-#endif
               if (   lmrDepth < 8
                   && !pos.see_ge(move, Value(-35 * lmrDepth * lmrDepth)))
                   continue;
@@ -1234,17 +1276,16 @@ moves_loop: // When in check search starts from here
               r -= r ? ONE_PLY : DEPTH_ZERO;
           else
 #endif
-#ifdef CRAZYHOUSE
-          if (pos.is_house() && givesCheck)
-              r -= r ? ONE_PLY : DEPTH_ZERO;
-          else
-#endif
           if (captureOrPromotion)
               r -= r ? ONE_PLY : DEPTH_ZERO;
           else
           {
               // Decrease reduction if opponent's move count is high
               if ((ss-1)->moveCount > 15)
+                  r -= ONE_PLY;
+
+              // Decrease reduction for exact PV nodes
+              if (pvExact)
                   r -= ONE_PLY;
 
               // Increase reduction if ttMove is a capture
@@ -1269,10 +1310,10 @@ moves_loop: // When in check search starts from here
                              - 4000;
 
               // Decrease/increase reduction by comparing opponent's stat score
-              if (ss->statScore > 0 && (ss-1)->statScore < 0)
+              if (ss->statScore >= 0 && (ss-1)->statScore < 0)
                   r -= ONE_PLY;
 
-              else if (ss->statScore < 0 && (ss-1)->statScore > 0)
+              else if ((ss-1)->statScore >= 0 && ss->statScore < 0)
                   r += ONE_PLY;
 
               // Decrease/increase reduction for moves with a good/bad history
@@ -1735,6 +1776,25 @@ moves_loop: // When in check search starts from here
     }
   }
 
+
+  // Is the PV leading to a draw position? Assumes all pv moves are legal
+  bool pv_is_draw(Position& pos) {
+
+    StateInfo st[MAX_PLY];
+    auto& pv = pos.this_thread()->rootMoves[0].pv;
+
+    for (size_t i = 0; i < pv.size(); ++i)
+        pos.do_move(pv[i], st[i]);
+
+    bool isDraw = pos.is_draw(pv.size());
+
+    for (size_t i = pv.size(); i > 0; --i)
+        pos.undo_move(pv[i-1]);
+
+    return isDraw;
+  }
+
+
 #ifdef SKILL
   // When playing with strength handicap, choose best move among a set of RootMoves
   // using a statistical rule dependent on 'level'. Idea by Heinz van Saanen.
@@ -1759,7 +1819,7 @@ moves_loop: // When in check search starts from here
         int push = (  weakness * int(topScore - rootMoves[i].score)
                     + delta * (rng.rand<unsigned>() % weakness)) / 128;
 
-        if (rootMoves[i].score + push > maxScore)
+        if (rootMoves[i].score + push >= maxScore)
         {
             maxScore = rootMoves[i].score + push;
             best = rootMoves[i].pv[0];
@@ -1899,6 +1959,10 @@ void Tablebases::filter_root_moves(Position& pos, Search::RootMoves& rootMoves) 
     UseRule50 = Options["Syzygy50MoveRule"];
     ProbeDepth = Options["SyzygyProbeDepth"] * ONE_PLY;
     Cardinality = Options["SyzygyProbeLimit"];
+
+    // Don't filter any moves if the user requested analysis on multiple
+    if (Options["MultiPV"] != 1)
+        return;
 
     // Skip TB probing when no TB found: !TBLargest -> !TB::Cardinality
     if (Cardinality > MaxCardinality)

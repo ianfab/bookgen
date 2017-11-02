@@ -40,6 +40,14 @@ namespace {
     if (V == ANTI_VARIANT)
         kfrom = pos.castling_king_square(Cr);
 #endif
+#ifdef EXTINCTION
+    if (V == EXTINCTION_VARIANT)
+        kfrom = pos.castling_king_square(Cr);
+#endif
+#ifdef TWOKINGS
+    if (V == TWOKINGS_VARIANT)
+        kfrom = pos.castling_king_square(Cr);
+#endif
     Square rfrom = pos.castling_rook_square(Cr);
     Square kto = relative_square(us, KingSide ? SQ_G1 : SQ_C1);
     Bitboard enemies = pos.pieces(~us);
@@ -51,6 +59,10 @@ namespace {
 
 #ifdef ANTI
     if (V != ANTI_VARIANT)
+    {
+#endif
+#ifdef EXTINCTION
+    if (V != EXTINCTION_VARIANT)
     {
 #endif
     for (Square s = kto; s != kfrom; s += K)
@@ -76,6 +88,9 @@ namespace {
 #endif
         return moveList;
     }
+#ifdef EXTINCTION
+    }
+#endif
 #ifdef ANTI
     }
 #endif
@@ -115,6 +130,10 @@ namespace {
         *moveList++ = make<PROMOTION>(to - D, to, ROOK);
         *moveList++ = make<PROMOTION>(to - D, to, BISHOP);
         *moveList++ = make<PROMOTION>(to - D, to, KNIGHT);
+#ifdef EXTINCTION
+        if (V == EXTINCTION_VARIANT)
+            *moveList++ = make<PROMOTION>(to - D, to, KING);
+#endif
     }
 
     // Knight promotion is the only promotion that can give a direct check
@@ -133,7 +152,7 @@ namespace {
     if (pos.count_in_hand<Pt>(Us))
     {
         if (Checks)
-            return moveList;
+            b &= pos.check_squares(Pt);
         while (b)
             *moveList++ = make_drop(pop_lsb(&b), make_piece(Us, Pt));
     }
@@ -216,14 +235,6 @@ namespace {
                 b2 |= dc2;
             }
         }
-#ifdef CRAZYHOUSE
-        // Do not require drops to be check (unless already required by target)
-        if (V == CRAZYHOUSE_VARIANT && Type != QUIET_CHECKS && pos.count_in_hand<PAWN>(Us))
-        {
-            Bitboard b = (Type == EVASIONS ? emptySquares & target : emptySquares) & ~(Rank1BB | Rank8BB);
-            moveList = generate_drops<Us, PAWN, false>(pos, moveList, b);
-        }
-#endif
 
         while (b1)
         {
@@ -372,22 +383,22 @@ namespace {
     const bool Checks = Type == QUIET_CHECKS;
 
     moveList = generate_pawn_moves<V, Us, Type>(pos, moveList, target);
+    moveList = generate_moves<V, KNIGHT, Checks>(pos, moveList, Us, target);
+    moveList = generate_moves<V, BISHOP, Checks>(pos, moveList, Us, target);
+    moveList = generate_moves<V,   ROOK, Checks>(pos, moveList, Us, target);
+    moveList = generate_moves<V,  QUEEN, Checks>(pos, moveList, Us, target);
 #ifdef CRAZYHOUSE
-    if (V == CRAZYHOUSE_VARIANT && Type != CAPTURES &&
-        (pos.count_in_hand<ALL_PIECES>(Us) - pos.count_in_hand<PAWN>(Us)))
+    if (V == CRAZYHOUSE_VARIANT && Type != CAPTURES && pos.count_in_hand<ALL_PIECES>(Us))
     {
         Bitboard b = Type == EVASIONS ? target ^ pos.checkers() :
                      Type == NON_EVASIONS ? target ^ pos.pieces(~Us) : target;
+        moveList = generate_drops<Us,   PAWN, Checks>(pos, moveList, b & ~(Rank1BB | Rank8BB));
         moveList = generate_drops<Us, KNIGHT, Checks>(pos, moveList, b);
         moveList = generate_drops<Us, BISHOP, Checks>(pos, moveList, b);
         moveList = generate_drops<Us,   ROOK, Checks>(pos, moveList, b);
         moveList = generate_drops<Us,  QUEEN, Checks>(pos, moveList, b);
     }
 #endif
-    moveList = generate_moves<V, KNIGHT, Checks>(pos, moveList, Us, target);
-    moveList = generate_moves<V, BISHOP, Checks>(pos, moveList, Us, target);
-    moveList = generate_moves<V,   ROOK, Checks>(pos, moveList, Us, target);
-    moveList = generate_moves<V,  QUEEN, Checks>(pos, moveList, Us, target);
 
 #ifdef ANTI
     if (V == ANTI_VARIANT)
@@ -402,6 +413,34 @@ namespace {
         }
         if (pos.can_capture())
             return moveList;
+    }
+    else
+#endif
+#ifdef EXTINCTION
+    if (V == EXTINCTION_VARIANT)
+    {
+        Bitboard kings = pos.pieces(Us, KING);
+        while (kings)
+        {
+            Square ksq = pop_lsb(&kings);
+            Bitboard b = pos.attacks_from<KING>(ksq) & target;
+            while (b)
+                *moveList++ = make_move(ksq, pop_lsb(&b));
+        }
+    }
+    else
+#endif
+#ifdef TWOKINGS
+    if (V == TWOKINGS_VARIANT && Type != EVASIONS)
+    {
+        Bitboard kings = pos.pieces(Us, KING);
+        while (kings)
+        {
+            Square ksq = pop_lsb(&kings);
+            Bitboard b = pos.attacks_from<KING>(ksq) & target;
+            while (b)
+                *moveList++ = make_move(ksq, pop_lsb(&b));
+        }
     }
     else
 #endif
@@ -502,6 +541,11 @@ ExtMove* generate(const Position& pos, ExtMove* moveList) {
       return us == WHITE ? generate_all<CRAZYHOUSE_VARIANT, WHITE, Type>(pos, moveList, target)
                          : generate_all<CRAZYHOUSE_VARIANT, BLACK, Type>(pos, moveList, target);
 #endif
+#ifdef EXTINCTION
+  if (pos.is_extinction())
+      return us == WHITE ? generate_all<EXTINCTION_VARIANT, WHITE, Type>(pos, moveList, target)
+                         : generate_all<EXTINCTION_VARIANT, BLACK, Type>(pos, moveList, target);
+#endif
 #ifdef HORDE
   if (pos.is_horde())
       return us == WHITE ? generate_all<HORDE_VARIANT, WHITE, Type>(pos, moveList, target)
@@ -526,6 +570,11 @@ ExtMove* generate(const Position& pos, ExtMove* moveList) {
       return us == WHITE ? generate_all<RELAY_VARIANT, WHITE, Type>(pos, moveList, target)
                          : generate_all<RELAY_VARIANT, BLACK, Type>(pos, moveList, target);
 #endif
+#ifdef TWOKINGS
+  if (pos.is_two_kings())
+      return us == WHITE ? generate_all<TWOKINGS_VARIANT, WHITE, Type>(pos, moveList, target)
+                         : generate_all<TWOKINGS_VARIANT, BLACK, Type>(pos, moveList, target);
+#endif
   return us == WHITE ? generate_all<CHESS_VARIANT, WHITE, Type>(pos, moveList, target)
                      : generate_all<CHESS_VARIANT, BLACK, Type>(pos, moveList, target);
 }
@@ -542,6 +591,10 @@ template<>
 ExtMove* generate<QUIET_CHECKS>(const Position& pos, ExtMove* moveList) {
 #ifdef ANTI
   if (pos.is_anti())
+      return moveList;
+#endif
+#ifdef EXTINCTION
+  if (pos.is_extinction())
       return moveList;
 #endif
 #ifdef RACE
@@ -596,6 +649,11 @@ ExtMove* generate<QUIET_CHECKS>(const Position& pos, ExtMove* moveList) {
       return us == WHITE ? generate_all<RELAY_VARIANT, WHITE, QUIET_CHECKS>(pos, moveList, ~pos.pieces())
                          : generate_all<RELAY_VARIANT, BLACK, QUIET_CHECKS>(pos, moveList, ~pos.pieces());
 #endif
+#ifdef TWOKINGS
+  if (pos.is_two_kings())
+      return us == WHITE ? generate_all<TWOKINGS_VARIANT, WHITE, QUIET_CHECKS>(pos, moveList, ~pos.pieces())
+                         : generate_all<TWOKINGS_VARIANT, BLACK, QUIET_CHECKS>(pos, moveList, ~pos.pieces());
+#endif
   return us == WHITE ? generate_all<CHESS_VARIANT, WHITE, QUIET_CHECKS>(pos, moveList, ~pos.pieces())
                      : generate_all<CHESS_VARIANT, BLACK, QUIET_CHECKS>(pos, moveList, ~pos.pieces());
 }
@@ -607,6 +665,10 @@ template<>
 ExtMove* generate<EVASIONS>(const Position& pos, ExtMove* moveList) {
 #ifdef ANTI
   if (pos.is_anti())
+      return moveList;
+#endif
+#ifdef EXTINCTION
+  if (pos.is_extinction())
       return moveList;
 #endif
 #ifdef RACE
@@ -663,6 +725,21 @@ ExtMove* generate<EVASIONS>(const Position& pos, ExtMove* moveList) {
   if (pos.is_losers() && pos.can_capture_losers())
       b &= pos.pieces(~us);
 #endif
+#ifdef TWOKINGS
+  // In two king, legality is checked in in Position::legal
+  if (pos.is_two_kings())
+  {
+      Bitboard kings = pos.pieces(us, KING);
+      while (kings)
+      {
+          Square ksq2 = pop_lsb(&kings);
+          Bitboard b2 = pos.attacks_from<KING>(ksq2) & ~pos.pieces(us);
+          while (b2)
+              *moveList++ = make_move(ksq2, pop_lsb(&b2));
+      }
+  }
+  else
+#endif
   while (b)
       *moveList++ = make_move(ksq, pop_lsb(&b));
 
@@ -708,6 +785,11 @@ ExtMove* generate<EVASIONS>(const Position& pos, ExtMove* moveList) {
       return us == WHITE ? generate_all<RELAY_VARIANT, WHITE, EVASIONS>(pos, moveList, target)
                          : generate_all<RELAY_VARIANT, BLACK, EVASIONS>(pos, moveList, target);
 #endif
+#ifdef TWOKINGS
+  if (pos.is_two_kings())
+      return us == WHITE ? generate_all<TWOKINGS_VARIANT, WHITE, EVASIONS>(pos, moveList, target)
+                         : generate_all<TWOKINGS_VARIANT, BLACK, EVASIONS>(pos, moveList, target);
+#endif
   return us == WHITE ? generate_all<CHESS_VARIANT, WHITE, EVASIONS>(pos, moveList, target)
                      : generate_all<CHESS_VARIANT, BLACK, EVASIONS>(pos, moveList, target);
 }
@@ -725,6 +807,9 @@ ExtMove* generate<LEGAL>(const Position& pos, ExtMove* moveList) {
   bool validate = pinned;
 #ifdef RACE
   if (pos.is_race()) validate = true;
+#endif
+#ifdef TWOKINGS
+  if (pos.is_two_kings()) validate = true;
 #endif
   Square ksq = pos.square<KING>(pos.side_to_move());
   ExtMove* cur = moveList;

@@ -316,6 +316,20 @@ Position& Position::set(const string& fenStr, bool isChess960, Variant v, StateI
           }
       }
 #endif
+#ifdef EXTINCTION
+      if (is_extinction())
+      {
+          // X-FEN is ambiguous if there are multiple kings
+          // Assume the first king on the rank has castling rights
+          const Square* kl = squares<KING>(c);
+          while ((ksq = *kl++) != SQ_NONE)
+          {
+              assert(piece_on(ksq) == make_piece(c, KING));
+              if (rank_of(ksq) == rank)
+                  break;
+          }
+      }
+#endif
       if (rank_of(ksq) != rank)
           continue;
       Piece rook = make_piece(c, ROOK);
@@ -417,7 +431,7 @@ void Position::set_castling_right(Color c, Square kfrom, Square rfrom) {
   st->castlingRights |= cr;
   castlingRightsMask[kfrom] |= cr;
   castlingRightsMask[rfrom] |= cr;
-#ifdef ANTI
+#if defined(ANTI) || defined(EXTINCTION) || defined(TWOKINGS)
   castlingKingSquare[cr] = kfrom;
 #endif
   castlingRookSquare[cr] = rfrom;
@@ -447,6 +461,14 @@ void Position::set_check_info(StateInfo* si) const {
   }
   else
 #endif
+#ifdef EXTINCTION
+  if (is_extinction())
+  {
+      si->blockersForKing[WHITE] = si->pinnersForKing[WHITE] = 0;
+      si->blockersForKing[BLACK] = si->pinnersForKing[BLACK] = 0;
+  }
+  else
+#endif
   {
   si->blockersForKing[WHITE] = slider_blockers(pieces(BLACK), square<KING>(WHITE), si->pinnersForKing[WHITE]);
   si->blockersForKing[BLACK] = slider_blockers(pieces(WHITE), square<KING>(BLACK), si->pinnersForKing[BLACK]);
@@ -455,6 +477,17 @@ void Position::set_check_info(StateInfo* si) const {
   Square ksq = square<KING>(~sideToMove);
 #ifdef ANTI
   if (is_anti()) { // There are no checks in antichess
+  si->checkSquares[PAWN]   = 0;
+  si->checkSquares[KNIGHT] = 0;
+  si->checkSquares[BISHOP] = 0;
+  si->checkSquares[ROOK]   = 0;
+  si->checkSquares[QUEEN]  = 0;
+  si->checkSquares[KING]   = 0;
+  return;
+  }
+#endif
+#ifdef EXTINCTION
+  if (is_extinction()) {
   si->checkSquares[PAWN]   = 0;
   si->checkSquares[KNIGHT] = 0;
   si->checkSquares[BISHOP] = 0;
@@ -491,6 +524,11 @@ void Position::set_check_info(StateInfo* si) const {
   si->checkSquares[BISHOP] = attacks_from<BISHOP>(ksq);
   si->checkSquares[ROOK]   = attacks_from<ROOK>(ksq);
   si->checkSquares[QUEEN]  = si->checkSquares[BISHOP] | si->checkSquares[ROOK];
+#ifdef TWOKINGS
+  if (is_two_kings())
+      si->checkSquares[KING] = attacks_from<KING>(ksq);
+  else
+#endif
   si->checkSquares[KING]   = 0;
 }
 
@@ -514,6 +552,11 @@ void Position::set_state(StateInfo* si) const {
 #endif
 #ifdef ANTI
   if (is_anti())
+      si->checkersBB = 0;
+  else
+#endif
+#ifdef EXTINCTION
+  if (is_extinction())
       si->checkersBB = 0;
   else
 #endif
@@ -745,6 +788,11 @@ bool Position::legal(Move m) const {
   if (is_anti())
       return true;
 #endif
+#ifdef EXTINCTION
+  // All pseudo-legal moves in extinction chess are legal
+  if (is_extinction())
+      return true;
+#endif
 #ifdef HORDE
   assert((is_horde() && is_horde_color(us)) || piece_on(square<KING>(us)) == make_piece(us, KING));
 #else
@@ -836,7 +884,19 @@ bool Position::legal(Move m) const {
   // square is attacked by the opponent. Castling moves are checked
   // for legality during move generation.
   if (type_of(piece_on(from)) == KING)
+  {
+#ifdef TWOKINGS
+      if (is_two_kings())
+      {
+          Square to = to_sq(m);
+          if (type_of(m) == CASTLING)
+              to = make_square(to >= from ? FILE_G : FILE_C, rank_of(from));
+          Square new_ksq = royal_king(pieces(us, KING) ^ from ^ to);
+          return !(attackers_to(new_ksq, (pieces() ^ from) | to) & (pieces(~us) - to));
+      }
+#endif
       return type_of(m) == CASTLING || !(attackers_to(to_sq(m)) & pieces(~us));
+  }
 
   // A non-king move is legal if and only if it is not pinned or it
   // is moving along the ray towards or away from the king.
@@ -1005,48 +1065,42 @@ bool Position::gives_check(Move m) const {
   if (is_anti())
       return false;
 #endif
+#ifdef EXTINCTION
+  if (is_extinction())
+      return false;
+#endif
 #ifdef ATOMIC
   if (is_atomic())
   {
       Square ksq = square<KING>(~sideToMove);
       Bitboard attacks = attacks_from<KING>(ksq);
 
-      // If kings are adjacent, there is no check
-      // If kings were adjacent, there may be direct checks (minus castle rook)
-      if (type_of(m) == CASTLING)
+      // Separating adjacent kings exposes direct checks (minus castle rook)
+      // For simplicity, resolves castling discovered checks by fall-through
+      switch (type_of(m))
       {
-          Square kto = relative_square(sideToMove, to > from ? SQ_G1 : SQ_C1);
-          if (attacks & kto)
+      case CASTLING:
+          if (!(attacks & square<KING>(sideToMove)) || relative_rank(sideToMove, ksq) == RANK_1)
+              break;
+          if (attacks & relative_square(sideToMove, to > from ? SQ_G1 : SQ_C1))
               return false;
-          if ((attacks & from) && (attackers_to(ksq) & (pieces(sideToMove) ^ to)))
-              return true;
-      }
-      else if (type_of(piece_on(from)) == KING)
-      {
-          if (attacks & to)
-              return false;
-          if (attacks & from)
-          {
-              if (attackers_to(ksq) & pieces(sideToMove, KNIGHT, PAWN))
-                  return true;
-              Bitboard occupied = (pieces() ^ from) | to;
-              return   (attacks_bb<  ROOK>(ksq, occupied) & pieces(sideToMove, QUEEN, ROOK))
-                    || (attacks_bb<BISHOP>(ksq, occupied) & pieces(sideToMove, QUEEN, BISHOP));
-          }
-      }
-      else if (attacks & square<KING>(sideToMove))
-          return false;
-      if (capture(m))
-      {
-          // Do blasted pieces discover checks?
-          Square capsq = type_of(m) == ENPASSANT ? make_square(file_of(to), rank_of(from)) : to;
-          Bitboard blast = attacks_from<KING>(to) & (pieces() ^ pieces(PAWN));
-          if (blast & ksq) // Variant ending
-              return false;
-          Bitboard b = pieces() ^ ((blast | capsq) | from);
+          return attackers_to(ksq) & (pieces(sideToMove) ^ from ^ to);
 
-          return (attacks_bb<  ROOK>(ksq, b) & pieces(sideToMove, QUEEN, ROOK) & b)
-              || (attacks_bb<BISHOP>(ksq, b) & pieces(sideToMove, QUEEN, BISHOP) & b);
+      default:
+          if (attacks & (type_of(piece_on(from)) == KING ? to : square<KING>(sideToMove)))
+              return false;
+          if (type_of(piece_on(from)) == KING && (attacks & square<KING>(sideToMove)))
+              return attackers_to(ksq, pieces() ^ from ^ to) & (pieces(sideToMove) ^ from);
+          if (capture(m))
+          {
+              if (attacks & to) // Variant ending
+                  return false;
+              // Blasted pieces may discover checks
+              Bitboard blast = attacks_from<KING>(to) & (pieces() ^ pieces(PAWN));
+              blast |= type_of(m) == ENPASSANT ? make_square(file_of(to), rank_of(from)) : to;
+
+              return attackers_to(ksq, pieces() ^ (blast | from)) & (pieces(sideToMove) ^ from) & ~blast;
+          }
       }
   }
 #endif
@@ -1107,6 +1161,9 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
 #ifdef ANTI
   assert(!is_anti() || !givesCheck);
 #endif
+#ifdef EXTINCTION
+  assert(!is_extinction() || !givesCheck);
+#endif
 
   thisThread->nodes.fetch_add(1, std::memory_order_relaxed);
   Key k = st->key ^ Zobrist::side;
@@ -1137,11 +1194,19 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
 
   assert(color_of(pc) == us);
   assert(captured == NO_PIECE || color_of(captured) == (type_of(m) != CASTLING ? them : us));
+
 #ifdef ANTI
-  assert(is_anti() || type_of(captured) != KING);
-#else
-  assert(type_of(captured) != KING);
+  if (is_anti()) {} else
 #endif
+#ifdef EXTINCTION
+  if (is_extinction()) {} else
+#endif
+#ifdef TWOKINGS
+  if (is_two_kings()) {} else
+#endif
+  {
+  assert(type_of(captured) != KING);
+  }
 
   if (type_of(m) == CASTLING)
   {
@@ -1285,6 +1350,15 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       k ^= Zobrist::castling[st->castlingRights & cr];
       st->castlingRights &= ~cr;
   }
+#ifdef TWOKINGS
+  // Moving any king loses the castling rights
+  else if (st->castlingRights && type_of(pc) == KING)
+  {
+      int cr = castlingRightsMask[square<KING>(us)];
+      k ^= Zobrist::castling[st->castlingRights & cr];
+      st->castlingRights &= ~cr;
+  }
+#endif
 
 #ifdef THREECHECK
   if (is_three_check() && givesCheck)
@@ -1341,10 +1415,19 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
           Piece promotion = make_piece(us, promotion_type(m));
 
           assert(relative_rank(us, to) == RANK_8);
+
 #ifdef ANTI
+#ifdef EXTINCTION
+          assert(type_of(promotion) >= KNIGHT && type_of(promotion) <= (is_anti() || is_extinction() ? KING : QUEEN));
+#else
           assert(type_of(promotion) >= KNIGHT && type_of(promotion) <= (is_anti() ? KING : QUEEN));
+#endif
+#else
+#ifdef EXTINCTION
+          assert(type_of(promotion) >= KNIGHT && type_of(promotion) <= (is_extinction() ? KING : QUEEN));
 #else
           assert(type_of(promotion) >= KNIGHT && type_of(promotion) <= QUEEN);
+#endif
 #endif
 
           remove_piece(pc, to);
@@ -1449,10 +1532,17 @@ void Position::undo_move(Move m) {
   assert(empty(from) || type_of(m) == CASTLING);
 #endif
 #ifdef ANTI
-  assert(is_anti() || type_of(st->capturedPiece) != KING);
-#else
-  assert(type_of(st->capturedPiece) != KING);
+  if (is_anti()) {} else
 #endif
+#ifdef EXTINCTION
+  if (is_extinction()) {} else
+#endif
+#ifdef TWOKINGS
+  if (is_two_kings()) {} else
+#endif
+  {
+  assert(type_of(st->capturedPiece) != KING);
+  }
 
   if (type_of(m) == PROMOTION)
   {
@@ -1463,9 +1553,17 @@ void Position::undo_move(Move m) {
 #endif
       assert(type_of(pc) == promotion_type(m));
 #ifdef ANTI
+#ifdef EXTINCTION
+      assert(type_of(pc) >= KNIGHT && type_of(pc) <= (is_anti() || is_extinction() ? KING : QUEEN));
+#else
       assert(type_of(pc) >= KNIGHT && type_of(pc) <= (is_anti() ? KING : QUEEN));
+#endif
+#else
+#ifdef EXTINCTION
+      assert(type_of(pc) >= KNIGHT && type_of(pc) <= (is_extinction() ? KING : QUEEN));
 #else
       assert(type_of(pc) >= KNIGHT && type_of(pc) <= QUEEN);
+#endif
 #endif
 
       remove_piece(pc, to);
@@ -1801,6 +1899,21 @@ bool Position::see_ge(Move m, Value threshold) const {
       if (!(st->pinnersForKing[stm] & ~occupied))
           stmAttackers &= ~st->blockersForKing[stm];
 
+#ifdef RACE
+      // Exclude checks in racing kings
+      if (is_race())
+      {
+          // Direct checks
+          for (PieceType pt = KNIGHT; pt <= QUEEN; ++pt)
+              if (attacks_from(pt, to) & square<KING>(~stm))
+                  stmAttackers &= ~pieces(stm, pt);
+
+          // Discovered checks
+          if (!(st->pinnersForKing[~stm] & ~occupied))
+              stmAttackers &= ~st->blockersForKing[~stm];
+      }
+#endif
+
       if (!stmAttackers)
           return relativeStm;
 
@@ -1918,6 +2031,15 @@ bool Position::pos_is_ok() const {
   }
   else
 #endif
+#ifdef EXTINCTION
+  if (is_extinction())
+  {
+      if ((sideToMove != WHITE && sideToMove != BLACK)
+          || (ep_square() != SQ_NONE && relative_rank(sideToMove, ep_square()) != RANK_6))
+          assert(0 && "pos_is_ok: Default");
+  }
+  else
+#endif
 #ifdef HORDE
   if (is_horde())
   {
@@ -1951,6 +2073,9 @@ bool Position::pos_is_ok() const {
 #ifdef ANTI
   if (is_anti()) {} else
 #endif
+#ifdef EXTINCTION
+  if (is_extinction()) {} else
+#endif
 #ifdef HORDE
   if (is_horde())
   {
@@ -1976,6 +2101,24 @@ bool Position::pos_is_ok() const {
       || attackers_to(square<KING>(~sideToMove)) & pieces(sideToMove))
       assert(0 && "pos_is_ok: Kings");
 
+#ifdef CRAZYHOUSE
+  if (is_house())
+  {
+      if (   (pieces(PAWN) & (Rank1BB | Rank8BB))
+          || pieceCount[W_PAWN] > 16
+          || pieceCount[B_PAWN] > 16)
+      assert(0 && "pos_is_ok: Pawns (crazyhouse)");
+  }
+  else
+#endif
+#ifdef HORDE
+  if (is_horde())
+  {
+      if (pieces(PAWN) & (is_horde_color(WHITE) ? Rank8BB : Rank1BB))
+          assert(0 && "pos_is_ok: Pawns (horde)");
+  }
+  else
+#endif
   if (   (pieces(PAWN) & (Rank1BB | Rank8BB))
       || pieceCount[W_PAWN] > 8
       || pieceCount[B_PAWN] > 8)
@@ -1996,6 +2139,14 @@ bool Position::pos_is_ok() const {
   set_state(&si);
   if (std::memcmp(&si, st, sizeof(StateInfo)))
       assert(0 && "pos_is_ok: State");
+#ifdef ANTI
+  if (is_anti() && st->checkersBB)
+      assert(0 && "pos_is_ok: Checkers (antichess)");
+#endif
+#ifdef EXTINCTION
+  if (is_extinction() && st->checkersBB)
+      assert(0 && "pos_is_ok: Checkers (extinction)");
+#endif
 
   for (Piece pc : Pieces)
   {
@@ -2014,11 +2165,11 @@ bool Position::pos_is_ok() const {
           if (!can_castle(c | s))
               continue;
 
-#ifdef ANTI
-          if (   piece_on(castlingKingSquare[c | s]) != make_piece(c, KING)
-              || piece_on(castlingRookSquare[c | s]) != make_piece(c, ROOK)
-              || castlingRightsMask[castlingKingSquare[c | s]] != (c | s)
-              || castlingRightsMask[castlingRookSquare[c | s]] != (c | s))
+#if defined(ANTI) || defined(EXTINCTION) || defined(TWOKINGS)
+          if (   piece_on(castlingRookSquare[c | s]) != make_piece(c, ROOK)
+              || piece_on(castlingKingSquare[c | s]) != make_piece(c, KING)
+              || castlingRightsMask[castlingRookSquare[c | s]] != (c | s)
+              || (castlingRightsMask[castlingKingSquare[c | s]] & (c | s)) != (c | s))
 #else
           if (   piece_on(castlingRookSquare[c | s]) != make_piece(c, ROOK)
               || castlingRightsMask[castlingRookSquare[c | s]] != (c | s)

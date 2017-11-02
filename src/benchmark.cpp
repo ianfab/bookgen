@@ -126,8 +126,11 @@ const vector<string> Defaults[VARIANT_NB] = {
 #ifdef ATOMIC
   {
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-    "rnbqkbnr/ppppp1pp/5p2/8/8/2N2N2/PPPPPPPP/R1BQKB1R b KQkq - 0 1",
+    "rnb1k1nr/pppp1ppp/4pq2/2b5/3P4/2P1PN2/PP3PPP/RNBQKB1R b KQkq - 0 1",
+    "r1bqkbnr/pp1p3p/1Qn1ppp1/8/8/4P3/PPPP1PPP/RNB1KB1R b KQkq - 0 1",
+    "r2qk2r/ppQ1p2p/2p1bn2/2np4/8/2N1PP2/PPPP2PP/R1B1K2R b KQkq - 0 1",
     "2k5/p6p/8/1p2p3/PP1p4/4P3/2P2rPP/K3R3 b - - 0 1",
+    "5r2/p6k/6p1/1p1p2Bp/8/7P/PPP3P1/5R1K w - - 1 1",
     "6k1/1pp3pp/5p2/8/8/2P1P3/5PPP/6K1 w - - 0 1",
     "8/k7/P7/8/8/6p1/2p3N1/2K5 w - - 0 1",
     "8/k7/P7/8/8/6p1/2p3N1/2K5 b - - 0 1"
@@ -150,6 +153,11 @@ const vector<string> Defaults[VARIANT_NB] = {
 
     // Stalemate
     "2R5/3Q2pk/2p1p3/1pP1P1Qp/1P3P1P/p1P1B3/P7/1R2K3[NRBNPBPRNPBN] b - - 98 55",
+  },
+#endif
+#ifdef EXTINCTION
+  {
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
   },
 #endif
 #ifdef HORDE
@@ -244,6 +252,13 @@ const vector<string> Defaults[VARIANT_NB] = {
     "r1bqkb1r/ppp1pppp/2n2n2/3p4/Q7/2P2N2/PP1PPPPP/RNB1KB1R w KQkq - 3+3 0 1"
   },
 #endif
+#ifdef TWOKINGS
+  {
+    "rnbqkknr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKKNR w KQkq - 0 1",
+    "r1b1kk1r/pp1ppppp/2N2n2/8/4P3/2N5/PPP2qPP/R1BQKK1R w KQkq - 0 7",
+    "rnbqk2r/ppppkppp/5n2/4p3/4P3/5N2/PPPPKPPP/RNBQK2R w KQkq - 4 4"
+  },
+#endif
 };
 
 const int defaultDepth[VARIANT_NB] = {
@@ -256,6 +271,9 @@ const int defaultDepth[VARIANT_NB] = {
 #endif
 #ifdef CRAZYHOUSE
   12,
+#endif
+#ifdef EXTINCTION
+  13,
 #endif
 #ifdef HORDE
   13,
@@ -273,6 +291,9 @@ const int defaultDepth[VARIANT_NB] = {
   13,
 #endif
 #ifdef THREECHECK
+  13,
+#endif
+#ifdef TWOKINGS
   13,
 #endif
 };

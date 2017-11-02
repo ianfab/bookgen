@@ -31,12 +31,21 @@
 
 namespace {
 
+  const Bitboard Center      = (FileDBB | FileEBB) & (Rank4BB | Rank5BB);
+  const Bitboard QueenSide   = FileABB | FileBBB | FileCBB | FileDBB;
+  const Bitboard CenterFiles = FileCBB | FileDBB | FileEBB | FileFBB;
+  const Bitboard KingSide    = FileEBB | FileFBB | FileGBB | FileHBB;
+
+  const Bitboard KingFlank[FILE_NB] = {
+    QueenSide, QueenSide, QueenSide, CenterFiles, CenterFiles, KingSide, KingSide, KingSide
+  };
+
   namespace Trace {
 
     enum Tracing {NO_TRACE, TRACE};
 
     enum Term { // The first 8 entries are for PieceType
-      MATERIAL = 8, IMBALANCE, MOBILITY, THREAT, PASSED, SPACE, TOTAL, TERM_NB
+      MATERIAL = 8, IMBALANCE, MOBILITY, THREAT, PASSED, SPACE, INITIATIVE, TOTAL, TERM_NB
     };
 
     double scores[TERM_NB][COLOR_NB][PHASE_NB];
@@ -54,7 +63,7 @@ namespace {
 
     std::ostream& operator<<(std::ostream& os, Term t) {
 
-      if (t == MATERIAL || t == IMBALANCE || t == Term(PAWN) || t == TOTAL)
+      if (t == MATERIAL || t == IMBALANCE || t == Term(PAWN) || t == INITIATIVE || t == TOTAL)
           os << "  ---   --- |   ---   --- | ";
       else
           os << std::setw(5) << scores[t][WHITE][MG] << " "
@@ -208,6 +217,23 @@ namespace {
         S( 111, 177), S( 115,181), S(124,197), S(124,199) }
     },
 #endif
+#ifdef EXTINCTION
+    {
+      { S(-126, -96), S(-103,-31), S(-90,-27), S(-40,  3), S(  0,  3), S(  4,  0), // Knights
+        S(  20,  12), S(  15, 33), S( 50, 46) },
+      { S(-156, -79), S(-115,-43), S( 42,-14), S( 35, 26), S( 64, 26), S( 74, 38), // Bishops
+        S(  70,  46), S(  83, 71), S( 70, 68), S( 66, 80), S( 64, 68), S( 70, 77),
+        S(  97,  92), S(  89, 98) },
+      { S( -53, -53), S( -22, -8), S(-48, 30), S(-14, 57), S( -4, 77), S( 11, 87), // Rooks
+        S(   7, 115), S(  12,123), S( 27,120), S(  6,140), S( 55,156), S( 18,161),
+        S(  51, 161), S(  54,171), S( 52,166) },
+      { S( -26, -56), S( -24,-14), S(  7, 14), S(  8, 15), S( 18, 34), S( 14, 41), // Queens
+        S(  28,  58), S(  33, 66), S( 40, 70), S( 47, 74), S( 50,100), S( 52,106),
+        S(  59, 111), S(  50, 95), S( 60,115), S( 61,126), S( 75,144), S( 82,119),
+        S(  95, 137), S( 102,138), S(100,142), S(119,154), S(129,156), S(107,156),
+        S( 111, 177), S( 115,181), S(124,197), S(124,199) }
+    },
+#endif
 #ifdef HORDE
     {
       { S(-126,-90), S( -7,-22), S( -46,-25), S( 19,7), S( -53, 71), S( 31, -1), // Knights
@@ -310,6 +336,23 @@ namespace {
         S(119,164), S(121,184), S(121,192), S(131,203) }
     },
 #endif
+#ifdef TWOKINGS
+    {
+      { S(-75,-76), S(-57,-54), S( -9,-28), S( -2,-10), S(  6,  5), S( 14, 12), // Knights
+        S( 22, 26), S( 29, 29), S( 36, 29) },
+      { S(-48,-59), S(-20,-23), S( 16, -3), S( 26, 13), S( 38, 24), S( 51, 42), // Bishops
+        S( 55, 54), S( 63, 57), S( 63, 65), S( 68, 73), S( 81, 78), S( 81, 86),
+        S( 91, 88), S( 98, 97) },
+      { S(-58,-76), S(-27,-18), S(-15, 28), S(-10, 55), S( -5, 69), S( -2, 82), // Rooks
+        S(  9,112), S( 16,118), S( 30,132), S( 29,142), S( 32,155), S( 38,165),
+        S( 46,166), S( 48,169), S( 58,171) },
+      { S(-39,-36), S(-21,-15), S(  3,  8), S(  3, 18), S( 14, 34), S( 22, 54), // Queens
+        S( 28, 61), S( 41, 73), S( 43, 79), S( 48, 92), S( 56, 94), S( 60,104),
+        S( 60,113), S( 66,120), S( 67,123), S( 70,126), S( 71,133), S( 73,136),
+        S( 79,140), S( 88,143), S( 88,148), S( 99,166), S(102,170), S(102,175),
+        S(106,184), S(109,191), S(113,206), S(116,212) }
+    },
+#endif
   };
 
   // Outpost[knight/bishop][supported by pawn] contains bonuses for minor
@@ -365,6 +408,12 @@ namespace {
       { V(27), V(13), V(19), V(111), V(140), V(203) }
     },
 #endif
+#ifdef EXTINCTION
+    {
+      { V(5), V( 5), V(31), V(73), V(166), V(252) },
+      { V(7), V(14), V(38), V(73), V(166), V(252) }
+    },
+#endif
 #ifdef HORDE
     {
       { V(-66), V(-25), V( 66), V(68), V( 72), V(250) },
@@ -384,10 +433,7 @@ namespace {
     },
 #endif
 #ifdef RACE
-    {
-      { V(5), V( 5), V(31), V(73), V(166), V(252) },
-      { V(7), V(14), V(38), V(73), V(166), V(252) }
-    },
+    {},
 #endif
 #ifdef RELAY
     {
@@ -396,6 +442,12 @@ namespace {
     },
 #endif
 #ifdef THREECHECK
+    {
+      { V(5), V( 5), V(31), V(73), V(166), V(252) },
+      { V(7), V(14), V(38), V(73), V(166), V(252) }
+    },
+#endif
+#ifdef TWOKINGS
     {
       { V(5), V( 5), V(31), V(73), V(166), V(252) },
       { V(7), V(14), V(38), V(73), V(166), V(252) }
@@ -474,6 +526,7 @@ namespace {
   // Assorted bonuses and penalties used by evaluation
   const Score MinorBehindPawn     = S( 16,  0);
   const Score BishopPawns         = S(  8, 12);
+  const Score LongRangedBishop    = S( 22,  0);
   const Score RookOnPawn          = S(  8, 24);
   const Score TrappedRook         = S( 92,  0);
   const Score WeakQueen           = S( 50, 10);
@@ -488,6 +541,9 @@ namespace {
 #endif
 #ifdef CRAZYHOUSE
     S(13, 20),
+#endif
+#ifdef EXTINCTION
+    S( 0,  0),
 #endif
 #ifdef HORDE
     S( 7,  0),
@@ -507,10 +563,13 @@ namespace {
 #ifdef THREECHECK
     S(16,  9),
 #endif
+#ifdef TWOKINGS
+    S( 7,  0),
+#endif
   };
   const Score PawnlessFlank       = S( 20, 80);
   const Score ThreatByHangingPawn = S( 71, 61);
-  const Score ThreatBySafePawn    = S(182,175);
+  const Score ThreatBySafePawn    = S(192,175);
   const Score ThreatByRank        = S( 16,  3);
   const Score Hanging             = S( 48, 27);
   const Score WeakUnopposedPawn   = S(  5, 25);
@@ -533,6 +592,9 @@ namespace {
 #ifdef CRAZYHOUSE
     { 0, 0, 112, 97, 61, 2 },
 #endif
+#ifdef EXTINCTION
+    {},
+#endif
 #ifdef HORDE
     { 0, 0, 78, 56, 45, 11 },
 #endif
@@ -551,19 +613,25 @@ namespace {
 #ifdef THREECHECK
     { 0, 0, 115, 64, 62, 35 },
 #endif
+#ifdef TWOKINGS
+    { 0, 0, 78, 56, 45, 11 },
+#endif
   };
 
   // Per-variant king danger malus factors
   const int KingDangerParams[VARIANT_NB][7] = {
     {   102,  191,  143, -848,   -9,   40,    0 },
 #ifdef ANTI
-    {   101,  235,  134, -717,  -11,   -5,    0 },
+    {},
 #endif
 #ifdef ATOMIC
     {   274,  166,  146, -654,  -12,   -7,   29 },
 #endif
 #ifdef CRAZYHOUSE
     {   138,  362,  170, -595,   -9,   -1,  306 },
+#endif
+#ifdef EXTINCTION
+    {},
 #endif
 #ifdef HORDE
     {   101,  235,  134, -717,  -11,   -5,    0 },
@@ -575,13 +643,16 @@ namespace {
     {   101,  235,  134, -717, -357,   -5,    0 },
 #endif
 #ifdef RACE
-    {   101,  235,  134, -717,  -11,   -5,    0 },
+    {},
 #endif
 #ifdef RELAY
     {   101,  235,  134, -717,  -11,   -5,    0 },
 #endif
 #ifdef THREECHECK
     {    85,  136,  106, -613,   -7,  -73,  181 },
+#endif
+#ifdef TWOKINGS
+    {   102,  191,  143, -848,   -9,   40,    0 },
 #endif
   };
 
@@ -611,6 +682,9 @@ namespace {
 #ifdef CRAZYHOUSE
     Value(12222),
 #endif
+#ifdef EXTINCTION
+    Value(12222),
+#endif
 #ifdef HORDE
     VALUE_ZERO,
 #endif
@@ -627,6 +701,9 @@ namespace {
     Value(12222),
 #endif
 #ifdef THREECHECK
+    Value(12222),
+#endif
+#ifdef TWOKINGS
     Value(12222),
 #endif
   };
@@ -667,6 +744,17 @@ namespace {
     }
     else
 #endif
+#ifdef EXTINCTION
+    if (pos.is_extinction())
+    {
+        attackedBy[Us][KING] = 0;
+        Bitboard kings = pos.pieces(Us, KING);
+        while (kings)
+            attackedBy[Us][KING] |= pos.attacks_from<KING>(pop_lsb(&kings));
+        b = attackedBy[Us][KING];
+    }
+    else
+#endif
     b = attackedBy[Us][KING] = pos.attacks_from<KING>(pos.square<KING>(Us));
     attackedBy[Us][PAWN] = pe->pawn_attacks(Us);
 
@@ -677,6 +765,9 @@ namespace {
     if ((
 #ifdef ANTI
         !pos.is_anti() &&
+#endif
+#ifdef EXTINCTION
+        !pos.is_extinction() &&
 #endif
         (pos.non_pawn_material(Them) >= RookValueMg + KnightValueMg))
 #ifdef CRAZYHOUSE
@@ -765,9 +856,15 @@ namespace {
                 && (pos.pieces(PAWN) & (s + pawn_push(Us))))
                 score += MinorBehindPawn;
 
-            // Penalty for pawns on the same color square as the bishop
             if (Pt == BISHOP)
+            {
+                // Penalty for pawns on the same color square as the bishop
                 score -= BishopPawns * pe->pawns_on_same_color_squares(Us, s);
+
+                // Bonus for bishop on a long diagonal which can "see" both center squares
+                if (more_than_one(Center & (attacks_bb<BISHOP>(s, pos.pieces(PAWN)) | s)))
+                    score += LongRangedBishop;
+            }
 
             // An important Chess960 pattern: A cornered bishop blocked by a friendly
             // pawn diagonally in front of it is a very serious problem, especially
@@ -822,14 +919,6 @@ namespace {
 
 
   // evaluate_king() assigns bonuses and penalties to a king of a given color
-
-  const Bitboard QueenSide   = FileABB | FileBBB | FileCBB | FileDBB;
-  const Bitboard CenterFiles = FileCBB | FileDBB | FileEBB | FileFBB;
-  const Bitboard KingSide    = FileEBB | FileFBB | FileGBB | FileHBB;
-
-  const Bitboard KingFlank[FILE_NB] = {
-    QueenSide, QueenSide, QueenSide, CenterFiles, CenterFiles, KingSide, KingSide, KingSide
-  };
 
   template<Tracing T>  template<Color Us>
   Score Evaluation<T>::evaluate_king() {
@@ -1434,6 +1523,9 @@ namespace {
     // that the endgame score will never change sign after the bonus.
     int v = ((eg > 0) - (eg < 0)) * std::max(initiative, -abs(eg));
 
+    if (T)
+        Trace::add(INITIATIVE, make_score(0, v));
+
     return make_score(0, v);
   }
 
@@ -1535,6 +1627,9 @@ namespace {
 #ifdef ANTI
     if (pos.is_anti()) {} else
 #endif
+#ifdef EXTINCTION
+    if (pos.is_extinction()) {} else
+#endif
 #ifdef RACE
     if (pos.is_race()) {} else
 #endif
@@ -1624,6 +1719,7 @@ std::string Eval::trace(const Position& pos) {
      << "        Threats | " << Term(THREAT)
      << "   Passed pawns | " << Term(PASSED)
      << "          Space | " << Term(SPACE)
+     << "     Initiative | " << Term(INITIATIVE)
      << "----------------+-------------+-------------+-------------\n"
      << "          Total | " << Term(TOTAL);
 

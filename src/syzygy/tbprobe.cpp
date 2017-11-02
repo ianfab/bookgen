@@ -65,6 +65,9 @@ const char* WdlSuffixes[SUBVARIANT_NB] = {
 #ifdef CRAZYHOUSE
     nullptr,
 #endif
+#ifdef EXTINCTION
+    nullptr,
+#endif
 #ifdef HORDE
     nullptr,
 #endif
@@ -81,6 +84,9 @@ const char* WdlSuffixes[SUBVARIANT_NB] = {
     nullptr,
 #endif
 #ifdef THREECHECK
+    nullptr,
+#endif
+#ifdef TWOKINGS
     nullptr,
 #endif
 #ifdef SUICIDE
@@ -105,6 +111,9 @@ const char* PawnlessWdlSuffixes[SUBVARIANT_NB] = {
 #ifdef CRAZYHOUSE
     nullptr,
 #endif
+#ifdef EXTINCTION
+    nullptr,
+#endif
 #ifdef HORDE
     nullptr,
 #endif
@@ -121,6 +130,9 @@ const char* PawnlessWdlSuffixes[SUBVARIANT_NB] = {
     nullptr,
 #endif
 #ifdef THREECHECK
+    nullptr,
+#endif
+#ifdef TWOKINGS
     nullptr,
 #endif
 #ifdef SUICIDE
@@ -145,6 +157,9 @@ const char* DtzSuffixes[SUBVARIANT_NB] = {
 #ifdef CRAZYHOUSE
     nullptr,
 #endif
+#ifdef EXTINCTION
+    nullptr,
+#endif
 #ifdef HORDE
     nullptr,
 #endif
@@ -161,6 +176,9 @@ const char* DtzSuffixes[SUBVARIANT_NB] = {
     nullptr,
 #endif
 #ifdef THREECHECK
+    nullptr,
+#endif
+#ifdef TWOKINGS
     nullptr,
 #endif
 #ifdef SUICIDE
@@ -185,6 +203,9 @@ const char* PawnlessDtzSuffixes[SUBVARIANT_NB] = {
 #ifdef CRAZYHOUSE
     nullptr,
 #endif
+#ifdef EXTINCTION
+    nullptr,
+#endif
 #ifdef HORDE
     nullptr,
 #endif
@@ -201,6 +222,9 @@ const char* PawnlessDtzSuffixes[SUBVARIANT_NB] = {
     nullptr,
 #endif
 #ifdef THREECHECK
+    nullptr,
+#endif
+#ifdef TWOKINGS
     nullptr,
 #endif
 #ifdef SUICIDE
@@ -293,16 +317,16 @@ struct Atomic {
     std::atomic_bool ready;
 };
 
-// We define types for the different parts of the WLDEntry and DTZEntry with
+// We define types for the different parts of the WDLEntry and DTZEntry with
 // corresponding specializations for pieces or pawns.
 
-struct WLDEntryPiece {
+struct WDLEntryPiece {
     PairsData* precomp;
 };
 
 struct WDLEntryPawn {
     uint8_t pawnCount[2];     // [Lead color / other color]
-    WLDEntryPiece file[2][4]; // [wtm / btm][FILE_A..FILE_D]
+    WDLEntryPiece file[2][4]; // [wtm / btm][FILE_A..FILE_D]
 };
 
 struct DTZEntryPiece {
@@ -334,7 +358,7 @@ struct WDLEntry : public TBEntry {
     WDLEntry(const std::string& code, Variant v);
    ~WDLEntry();
     union {
-        WLDEntryPiece pieceTable[2]; // [wtm / btm]
+        WDLEntryPiece pieceTable[2]; // [wtm / btm]
         WDLEntryPawn  pawnTable;
     };
 };
@@ -1582,6 +1606,12 @@ void* init(Entry& e, const Position& pos) {
             { 0x71, 0xE8, 0x23, 0x5D }
         },
 #endif
+#ifdef EXTINCTION
+        {
+            { 0xD7, 0x66, 0x0C, 0xA5 },
+            { 0x71, 0xE8, 0x23, 0x5D }
+        },
+#endif
 #ifdef HORDE
         {
             { 0xD7, 0x66, 0x0C, 0xA5 },
@@ -1613,6 +1643,12 @@ void* init(Entry& e, const Position& pos) {
         },
 #endif
 #ifdef THREECHECK
+        {
+            { 0xD7, 0x66, 0x0C, 0xA5 },
+            { 0x71, 0xE8, 0x23, 0x5D }
+        },
+#endif
+#ifdef TWOKINGS
         {
             { 0xD7, 0x66, 0x0C, 0xA5 },
             { 0x71, 0xE8, 0x23, 0x5D }
@@ -1661,6 +1697,12 @@ void* init(Entry& e, const Position& pos) {
             { 0x71, 0xE8, 0x23, 0x5D }
         },
 #endif
+#ifdef EXTINCTION
+        {
+            { 0xD7, 0x66, 0x0C, 0xA5 },
+            { 0x71, 0xE8, 0x23, 0x5D }
+        },
+#endif
 #ifdef HORDE
         {
             { 0xD7, 0x66, 0x0C, 0xA5 },
@@ -1692,6 +1734,12 @@ void* init(Entry& e, const Position& pos) {
         },
 #endif
 #ifdef THREECHECK
+        {
+            { 0xD7, 0x66, 0x0C, 0xA5 },
+            { 0x71, 0xE8, 0x23, 0x5D }
+        },
+#endif
+#ifdef TWOKINGS
         {
             { 0xD7, 0x66, 0x0C, 0xA5 },
             { 0x71, 0xE8, 0x23, 0x5D }
@@ -2294,6 +2342,9 @@ static int has_repeated(StateInfo *st)
 // no moves were filtered out.
 bool Tablebases::root_probe(Position& pos, Search::RootMoves& rootMoves, Value& score)
 {
+#ifdef EXTINCTION
+    if (pos.is_extinction()) return false;
+#endif
 #ifdef KOTH
     if (pos.is_koth()) return false;
 #endif
@@ -2305,6 +2356,9 @@ bool Tablebases::root_probe(Position& pos, Search::RootMoves& rootMoves, Value& 
 #endif
 #ifdef THREECHECK
     if (pos.is_three_check()) return false;
+#endif
+#ifdef TWOKINGS
+    if (pos.is_two_kings()) return false;
 #endif
 #ifdef HORDE
     if (pos.is_horde()) return false;
@@ -2445,6 +2499,9 @@ bool Tablebases::root_probe(Position& pos, Search::RootMoves& rootMoves, Value& 
 // no moves were filtered out.
 bool Tablebases::root_probe_wdl(Position& pos, Search::RootMoves& rootMoves, Value& score)
 {
+#ifdef EXTINCTION
+    if (pos.is_extinction()) return false;
+#endif
 #ifdef KOTH
     if (pos.is_koth()) return false;
 #endif
@@ -2456,6 +2513,9 @@ bool Tablebases::root_probe_wdl(Position& pos, Search::RootMoves& rootMoves, Val
 #endif
 #ifdef THREECHECK
     if (pos.is_three_check()) return false;
+#endif
+#ifdef TWOKINGS
+    if (pos.is_two_kings()) return false;
 #endif
 #ifdef HORDE
     if (pos.is_horde()) return false;
