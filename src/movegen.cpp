@@ -61,6 +61,14 @@ namespace {
         return moveList;
 
     *moveList++ = m;
+    if (pos.has_hawk(us))
+        *moveList++ = make<CASTLING >(kfrom, rfrom, HAWK);
+    if (pos.has_elephant(us))
+        *moveList++ = make<CASTLING >(kfrom, rfrom, ELEPHANT);
+    if (pos.has_hawk(us))
+        *moveList++ = make<CASTLING2>(kfrom, rfrom, HAWK);
+    if (pos.has_elephant(us))
+        *moveList++ = make<CASTLING2>(kfrom, rfrom, ELEPHANT);
     return moveList;
   }
 
@@ -73,15 +81,20 @@ namespace {
 
     if (Type == QUIETS || Type == EVASIONS || Type == NON_EVASIONS)
     {
-        *moveList++ = make<PROMOTION>(to - D, to, ROOK);
-        *moveList++ = make<PROMOTION>(to - D, to, BISHOP);
-        *moveList++ = make<PROMOTION>(to - D, to, KNIGHT);
+        *moveList++ = make<PROMOTION2>(to - D, to, ELEPHANT);
+        *moveList++ = make<PROMOTION2>(to - D, to, HAWK);
+        *moveList++ = make<PROMOTION >(to - D, to, ROOK);
+        *moveList++ = make<PROMOTION >(to - D, to, BISHOP);
+        *moveList++ = make<PROMOTION >(to - D, to, KNIGHT);
     }
 
-    // Knight promotion is the only promotion that can give a direct check
+    // Elephant/Hawk/Knight promotions are the only promotions that can give a direct check
     // that's not already included in the queen promotion.
     if (Type == QUIET_CHECKS && (PseudoAttacks[KNIGHT][to] & ksq))
-        *moveList++ = make<PROMOTION>(to - D, to, KNIGHT);
+    {
+        *moveList++ = make<PROMOTION2>(to - D, to, ELEPHANT);
+        *moveList++ = make<PROMOTION2>(to - D, to, HAWK);
+    }
     else
         (void)ksq; // Silence a warning under MSVC
 
@@ -251,7 +264,17 @@ namespace {
             b &= pos.check_squares(Pt);
 
         while (b)
-            *moveList++ = make_move(from, pop_lsb(&b));
+        {
+            Square s = pop_lsb(&b);
+            *moveList++ = make_move(from, s);
+            if (pos.gates(us) & from)
+            {
+                if (pos.has_hawk(us))
+                    *moveList++ = make<NORMAL>(from, s, HAWK);
+                if (pos.has_elephant(us))
+                    *moveList++ = make<NORMAL>(from, s, ELEPHANT);
+            }
+        }
     }
 
     return moveList;
@@ -264,17 +287,29 @@ namespace {
     const bool Checks = Type == QUIET_CHECKS;
 
     moveList = generate_pawn_moves<Us, Type>(pos, moveList, target);
-    moveList = generate_moves<KNIGHT, Checks>(pos, moveList, Us, target);
-    moveList = generate_moves<BISHOP, Checks>(pos, moveList, Us, target);
-    moveList = generate_moves<  ROOK, Checks>(pos, moveList, Us, target);
-    moveList = generate_moves< QUEEN, Checks>(pos, moveList, Us, target);
+    moveList = generate_moves<  KNIGHT, Checks>(pos, moveList, Us, target);
+    moveList = generate_moves<  BISHOP, Checks>(pos, moveList, Us, target);
+    moveList = generate_moves<    ROOK, Checks>(pos, moveList, Us, target);
+    moveList = generate_moves<   QUEEN, Checks>(pos, moveList, Us, target);
+    moveList = generate_moves<    HAWK, Checks>(pos, moveList, Us, target);
+    moveList = generate_moves<ELEPHANT, Checks>(pos, moveList, Us, target);
 
     if (Type != QUIET_CHECKS && Type != EVASIONS)
     {
         Square ksq = pos.square<KING>(Us);
         Bitboard b = pos.attacks_from<KING>(ksq) & target;
         while (b)
-            *moveList++ = make_move(ksq, pop_lsb(&b));
+        {
+            Square s = pop_lsb(&b);
+            *moveList++ = make_move(ksq, s);
+            if (pos.gates(Us) & ksq)
+            {
+                if (pos.has_hawk(Us))
+                    *moveList++ = make<NORMAL>(ksq, s, HAWK);
+                if (pos.has_elephant(Us))
+                    *moveList++ = make<NORMAL>(ksq, s, ELEPHANT);
+            }
+        }
     }
 
     if (Type != CAPTURES && Type != EVASIONS && pos.can_castle(Us))
@@ -384,7 +419,17 @@ ExtMove* generate<EVASIONS>(const Position& pos, ExtMove* moveList) {
   // Generate evasions for king, capture and non capture moves
   Bitboard b = pos.attacks_from<KING>(ksq) & ~pos.pieces(us) & ~sliderAttacks;
   while (b)
-      *moveList++ = make_move(ksq, pop_lsb(&b));
+  {
+      Square s = pop_lsb(&b);
+      *moveList++ = make_move(ksq, s);
+      if (pos.gates(us) & ksq)
+      {
+          if (pos.has_hawk(us))
+              *moveList++ = make<NORMAL>(ksq, s, HAWK);
+          if (pos.has_elephant(us))
+              *moveList++ = make<NORMAL>(ksq, s, ELEPHANT);
+      }
+  }
 
   if (more_than_one(pos.checkers()))
       return moveList; // Double check, only a king move can save the day

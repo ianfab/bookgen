@@ -45,6 +45,8 @@ struct StateInfo {
   int    pliesFromNull;
   Score  psq;
   Square epSquare;
+  int    inHand[COLOR_NB][2];
+  Bitboard gatesBB;
 
   // Not copied when making a move (will be recomputed anyhow)
   Key        key;
@@ -86,9 +88,11 @@ public:
   Bitboard pieces() const;
   Bitboard pieces(PieceType pt) const;
   Bitboard pieces(PieceType pt1, PieceType pt2) const;
+  Bitboard pieces(PieceType pt1, PieceType pt2, PieceType pt3) const;
   Bitboard pieces(Color c) const;
   Bitboard pieces(Color c, PieceType pt) const;
   Bitboard pieces(Color c, PieceType pt1, PieceType pt2) const;
+  Bitboard pieces(Color c, PieceType pt1, PieceType pt2, PieceType pt3) const;
   Piece piece_on(Square s) const;
   Square ep_square() const;
   bool empty(Square s) const;
@@ -102,6 +106,9 @@ public:
   int can_castle(CastlingRight cr) const;
   bool castling_impeded(CastlingRight cr) const;
   Square castling_rook_square(CastlingRight cr) const;
+  bool has_hawk(Color c) const;
+  bool has_elephant(Color c) const;
+  Bitboard gates(Color c) const;
 
   // Checking
   Bitboard checkers() const;
@@ -171,6 +178,8 @@ private:
   // Other helpers
   void put_piece(Piece pc, Square s);
   void remove_piece(Piece pc, Square s);
+  void add_to_hand(Color c, PieceType pt);
+  void remove_from_hand(Color c, PieceType pt);
   void move_piece(Piece pc, Square from, Square to);
   template<bool Do>
   void do_castling(Color us, Square from, Square& to, Square& rfrom, Square& rto);
@@ -222,6 +231,10 @@ inline Bitboard Position::pieces(PieceType pt1, PieceType pt2) const {
   return byTypeBB[pt1] | byTypeBB[pt2];
 }
 
+inline Bitboard Position::pieces(PieceType pt1, PieceType pt2, PieceType pt3) const {
+  return byTypeBB[pt1] | byTypeBB[pt2] | byTypeBB[pt3];
+}
+
 inline Bitboard Position::pieces(Color c) const {
   return byColorBB[c];
 }
@@ -232,6 +245,10 @@ inline Bitboard Position::pieces(Color c, PieceType pt) const {
 
 inline Bitboard Position::pieces(Color c, PieceType pt1, PieceType pt2) const {
   return byColorBB[c] & (byTypeBB[pt1] | byTypeBB[pt2]);
+}
+
+inline Bitboard Position::pieces(Color c, PieceType pt1, PieceType pt2, PieceType pt3) const {
+  return byColorBB[c] & (byTypeBB[pt1] | byTypeBB[pt2] | byTypeBB[pt3]);
 }
 
 template<PieceType Pt> inline int Position::count(Color c) const {
@@ -255,6 +272,18 @@ inline Square Position::ep_square() const {
   return st->epSquare;
 }
 
+inline bool Position::has_hawk(Color c) const {
+  return st->inHand[c][0];
+}
+
+inline bool Position::has_elephant(Color c) const {
+  return st->inHand[c][1];
+}
+
+inline Bitboard Position::gates(Color c) const {
+  return st->gatesBB & (c == WHITE ? Rank1BB : Rank8BB);
+}
+
 inline int Position::can_castle(CastlingRight cr) const {
   return st->castlingRights & cr;
 }
@@ -275,7 +304,9 @@ template<PieceType Pt>
 inline Bitboard Position::attacks_from(Square s) const {
   assert(Pt != PAWN);
   return  Pt == BISHOP || Pt == ROOK ? attacks_bb<Pt>(s, byTypeBB[ALL_PIECES])
-        : Pt == QUEEN  ? attacks_from<ROOK>(s) | attacks_from<BISHOP>(s)
+        : Pt == QUEEN    ? attacks_from<ROOK>(s) | attacks_from<BISHOP>(s)
+        : Pt == HAWK     ? PseudoAttacks[KNIGHT][s] | attacks_from<BISHOP>(s)
+        : Pt == ELEPHANT ? PseudoAttacks[KNIGHT][s] | attacks_from<  ROOK>(s)
         : PseudoAttacks[Pt][s];
 }
 
@@ -404,6 +435,16 @@ inline void Position::remove_piece(Piece pc, Square s) {
   pieceList[pc][index[lastSquare]] = lastSquare;
   pieceList[pc][pieceCount[pc]] = SQ_NONE;
   pieceCount[make_piece(color_of(pc), ALL_PIECES)]--;
+}
+
+inline void Position::add_to_hand(Color c, PieceType pt) {
+  assert(pt == HAWK || pt == ELEPHANT);
+  st->inHand[c][pt == ELEPHANT]++;
+}
+
+inline void Position::remove_from_hand(Color c, PieceType pt) {
+  assert(pt == HAWK || pt == ELEPHANT);
+  st->inHand[c][pt == ELEPHANT]--;
 }
 
 inline void Position::move_piece(Piece pc, Square from, Square to) {

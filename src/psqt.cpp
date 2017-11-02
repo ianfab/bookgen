@@ -23,8 +23,8 @@
 #include "types.h"
 
 Value PieceValue[PHASE_NB][PIECE_NB] = {
-  { VALUE_ZERO, PawnValueMg, KnightValueMg, BishopValueMg, RookValueMg, QueenValueMg },
-  { VALUE_ZERO, PawnValueEg, KnightValueEg, BishopValueEg, RookValueEg, QueenValueEg }
+  { VALUE_ZERO, PawnValueMg, KnightValueMg, BishopValueMg, RookValueMg, QueenValueMg, VALUE_ZERO, HawkValueMg, ElephantValueMg },
+  { VALUE_ZERO, PawnValueEg, KnightValueEg, BishopValueEg, RookValueEg, QueenValueEg, VALUE_ZERO, HawkValueEg, ElephantValueEg }
 };
 
 namespace PSQT {
@@ -95,19 +95,39 @@ const Score Bonus[][RANK_NB][int(FILE_NB) / 2] = {
    { S(118, 95), S(159,155), S( 84,176), S( 41,174) },
    { S( 87, 50), S(128, 99), S( 63,122), S( 20,139) },
    { S( 63,  9), S( 88, 55), S( 47, 80), S(  0, 90) }
+  },
+  { // Hawk
+   { S(-44,-58), S(-13,-31), S(-25,-37), S(-34,-19) },
+   { S(-20,-34), S( 20, -9), S( 12,-14), S(  1,  4) },
+   { S( -9,-23), S( 27,  0), S( 21, -3), S( 11, 16) },
+   { S(-11,-26), S( 28, -3), S( 21, -5), S( 10, 16) },
+   { S(-11,-26), S( 27, -4), S( 16, -7), S(  9, 14) },
+   { S(-17,-24), S( 16, -2), S( 12,  0), S(  2, 13) },
+   { S(-23,-34), S( 17,-10), S(  6,-12), S( -2,  6) },
+   { S(-35,-55), S(-11,-32), S(-19,-36), S(-29,-17) }
+  },
+  { // Elephant
+   { S(-25, 0), S(-16, 0), S(-16, 0), S(-9, 0) },
+   { S(-21, 0), S( -8, 0), S( -3, 0), S( 0, 0) },
+   { S(-21, 0), S( -9, 0), S( -4, 0), S( 2, 0) },
+   { S(-22, 0), S( -6, 0), S( -1, 0), S( 2, 0) },
+   { S(-22, 0), S( -7, 0), S(  0, 0), S( 1, 0) },
+   { S(-21, 0), S( -7, 0), S(  0, 0), S( 2, 0) },
+   { S(-12, 0), S(  4, 0), S(  8, 0), S(12, 0) },
+   { S(-23, 0), S(-15, 0), S(-11, 0), S(-5, 0) }
   }
 };
 
 #undef S
 
-Score psq[PIECE_NB][SQUARE_NB];
+Score psq[PIECE_NB][SQUARE_NB + 1];
 
 // init() initializes piece-square tables: the white halves of the tables are
 // copied from Bonus[] adding the piece value, then the black halves of the
 // tables are initialized by flipping and changing the sign of the white scores.
 void init() {
 
-  for (Piece pc = W_PAWN; pc <= W_KING; ++pc)
+  for (Piece pc = W_PAWN; pc <= W_ELEPHANT; ++pc)
   {
       PieceValue[MG][~pc] = PieceValue[MG][pc];
       PieceValue[EG][~pc] = PieceValue[EG][pc];
@@ -120,6 +140,8 @@ void init() {
           psq[ pc][ s] = v + Bonus[pc][rank_of(s)][f];
           psq[~pc][~s] = -psq[pc][s];
       }
+      psq[ pc][SQUARE_NB] = v;
+      psq[~pc][SQUARE_NB] = -psq[pc][SQUARE_NB];
   }
 }
 

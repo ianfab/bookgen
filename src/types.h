@@ -111,6 +111,15 @@ const int MAX_PLY   = 128;
 /// bit 14-15: special move flag: promotion (1), en passant (2), castling (3)
 /// NOTE: EN-PASSANT bit is set only when a pawn can be captured
 ///
+/// Gating moves are encoded by adding (gated piece type - KING) in bits 12-13.
+///
+/// For castling moves where a piece is gated on the rook square, bits 14-15
+/// are changed to PROMOTION in order to distinguish them from castling moves
+/// where the piece is gated on the king's origin square.
+///
+/// Promotions to HAWK or ELEPHANT are encoded by settting bits 14-15 to ENPASSANT,
+/// and bits 12-13 are set to (gated piece type - KING).
+///
 /// Special cases are MOVE_NONE and MOVE_NULL. We can sneak these in because in
 /// any normal move destination square is always different from origin square
 /// while MOVE_NONE and MOVE_NULL have the same origin and destination square.
@@ -122,9 +131,11 @@ enum Move : int {
 
 enum MoveType {
   NORMAL,
-  PROMOTION = 1 << 14,
-  ENPASSANT = 2 << 14,
-  CASTLING  = 3 << 14
+  PROMOTION  = 1 << 14,
+  ENPASSANT  = 2 << 14,
+  CASTLING   = 3 << 14,
+  PROMOTION2 = ENPASSANT,
+  CASTLING2  = PROMOTION
 };
 
 enum Color {
@@ -183,26 +194,28 @@ enum Value : int {
   VALUE_MATE_IN_MAX_PLY  =  VALUE_MATE - 2 * MAX_PLY,
   VALUE_MATED_IN_MAX_PLY = -VALUE_MATE + 2 * MAX_PLY,
 
-  PawnValueMg   = 171,   PawnValueEg   = 240,
-  KnightValueMg = 764,   KnightValueEg = 848,
-  BishopValueMg = 826,   BishopValueEg = 891,
-  RookValueMg   = 1282,  RookValueEg   = 1373,
-  QueenValueMg  = 2526,  QueenValueEg  = 2646,
+  PawnValueMg     = 171,   PawnValueEg     = 240,
+  KnightValueMg   = 764,   KnightValueEg   = 848,
+  BishopValueMg   = 826,   BishopValueEg   = 891,
+  RookValueMg     = 1282,  RookValueEg     = 1373,
+  QueenValueMg    = 2526,  QueenValueEg    = 2646,
+  HawkValueMg     = 2000,  HawkValueEg     = 2000,
+  ElephantValueMg = 2000,  ElephantValueEg = 2000,
 
   MidgameLimit  = 15258, EndgameLimit  = 3915
 };
 
 enum PieceType {
-  NO_PIECE_TYPE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING,
+  NO_PIECE_TYPE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, HAWK, ELEPHANT,
   ALL_PIECES = 0,
-  PIECE_TYPE_NB = 8
+  PIECE_TYPE_NB = 9
 };
 
 enum Piece {
   NO_PIECE,
-  W_PAWN = 1, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING,
-  B_PAWN = 9, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING,
-  PIECE_NB = 16
+  W_PAWN = 1,  W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING, W_HAWK, W_ELEPHANT,
+  B_PAWN = 10, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING, B_HAWK, B_ELEPHANT,
+  PIECE_NB = 18
 };
 
 extern Value PieceValue[PHASE_NB][PIECE_NB];
@@ -348,7 +361,7 @@ inline Square operator~(Square s) {
 }
 
 inline Piece operator~(Piece pc) {
-  return Piece(pc ^ 8); // Swap color of piece B_KNIGHT -> W_KNIGHT
+  return Piece(pc < 9 ? pc + 9 : pc - 9); // Swap color of piece B_KNIGHT -> W_KNIGHT
 }
 
 inline CastlingRight operator|(Color c, CastlingSide s) {
@@ -368,16 +381,16 @@ inline Square make_square(File f, Rank r) {
 }
 
 inline Piece make_piece(Color c, PieceType pt) {
-  return Piece((c << 3) + pt);
+  return Piece((c ? 9 : 0) + pt);
 }
 
 inline PieceType type_of(Piece pc) {
-  return PieceType(pc & 7);
+  return PieceType(pc < 9 ? pc : pc - 9);
 }
 
 inline Color color_of(Piece pc) {
   assert(pc != NO_PIECE);
-  return Color(pc >> 3);
+  return Color(pc >= 9);
 }
 
 inline bool is_ok(Square s) {
@@ -425,11 +438,25 @@ inline int from_to(Move m) {
  return m & 0xFFF;
 }
 
+inline bool is_gating(Move m) {
+  return (m & (3 << 12)) && ((m & (3 << 14)) == NORMAL || (m & (3 << 14)) == CASTLING || rank_of(from_sq(m)) == rank_of(to_sq(m)));
+}
+
+inline bool gating_on_castling_rook(Move m) {
+  return (m & (3 << 14)) == PROMOTION && (m & (3 << 12)) && rank_of(from_sq(m)) == rank_of(to_sq(m));
+}
+
 inline MoveType type_of(Move m) {
+  if ((m & (3 << 14)) == PROMOTION2 && (m & (3 << 12)))
+      return PROMOTION;
+  if (gating_on_castling_rook(m))
+      return CASTLING;
   return MoveType(m & (3 << 14));
 }
 
 inline PieceType promotion_type(Move m) {
+  if ((m & (3 << 14)) == PROMOTION2)
+      return PieceType(((m >> 12) & 3) + KING);
   return PieceType(((m >> 12) & 3) + KNIGHT);
 }
 
@@ -439,7 +466,13 @@ inline Move make_move(Square from, Square to) {
 
 template<MoveType T>
 inline Move make(Square from, Square to, PieceType pt = KNIGHT) {
+  if (pt > KING)
+      return Move(T + ((pt - KING) << 12) + (from << 6) + to);
   return Move(T + ((pt - KNIGHT) << 12) + (from << 6) + to);
+}
+
+inline PieceType gating_type(Move m) {
+  return PieceType(((m >> 12) & 3) + KING);
 }
 
 inline bool is_ok(Move m) {
