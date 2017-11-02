@@ -1,3 +1,4 @@
 *.o
 stockfish
+bookgen
 .depend
