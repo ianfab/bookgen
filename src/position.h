@@ -207,6 +207,9 @@ public:
   bool is_extinction_win() const;
   bool is_extinction_loss() const;
 #endif
+#ifdef GRID
+  bool is_grid() const;
+#endif
 #ifdef KOTH
   bool is_koth() const;
   bool is_koth_win() const;
@@ -238,7 +241,10 @@ public:
 #ifdef TWOKINGS
   bool is_two_kings() const;
   Square royal_king(Color c) const;
-  Square royal_king(Bitboard kings) const;
+  Square royal_king(Color c, Bitboard kings) const;
+#endif
+#ifdef TWOKINGSSYMMETRIC
+  bool is_two_kings_symmetric() const;
 #endif
 #ifdef ANTI
   bool is_anti() const;
@@ -433,19 +439,29 @@ inline bool Position::is_two_kings() const {
 }
 
 inline Square Position::royal_king(Color c) const {
-  return royal_king(pieces(c, KING));
+  return royal_king(c, pieces(c, KING));
 }
 
-inline Square Position::royal_king(Bitboard kings) const {
+inline Square Position::royal_king(Color c, Bitboard kings) const {
   assert(kings);
   // Find the royal king
   for (File f = FILE_A; f <= FILE_H; ++f)
   {
       if (kings & file_bb(f))
-          return lsb(kings & file_bb(f)); // use msb for black to get symmetrical variant
+#ifdef TWOKINGSSYMMETRIC
+          return backmost_sq(is_two_kings_symmetric() ? c : WHITE, kings & file_bb(f));
+#else
+          return backmost_sq(WHITE, kings & file_bb(f));
+#endif
   }
   assert(false);
-  return SQ_NONE; // silence a warning
+  return c == WHITE ? SQ_NONE : SQ_NONE; // silence two warnings
+}
+#endif
+
+#ifdef TWOKINGSSYMMETRIC
+inline bool Position::is_two_kings_symmetric() const {
+  return subvar == TWOKINGSSYMMETRIC_VARIANT;
 }
 #endif
 
@@ -596,6 +612,12 @@ inline bool Position::is_extinction_win() const {
 inline bool Position::is_extinction_loss() const {
   return !(   count<  KING>(sideToMove) && count< QUEEN>(sideToMove) && count<ROOK>(sideToMove)
            && count<BISHOP>(sideToMove) && count<KNIGHT>(sideToMove) && count<PAWN>(sideToMove));
+}
+#endif
+
+#ifdef GRID
+inline bool Position::is_grid() const {
+  return var == GRID_VARIANT;
 }
 #endif
 

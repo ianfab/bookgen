@@ -102,7 +102,7 @@ const bool Is64Bit = false;
 typedef uint64_t Key;
 typedef uint64_t Bitboard;
 
-#ifdef CRAZYHOUSE
+#if defined(CRAZYHOUSE) || defined(HORDE)
 const int MAX_MOVES = 512;
 #else
 const int MAX_MOVES = 256;
@@ -123,6 +123,9 @@ enum Variant {
 #endif
 #ifdef EXTINCTION
   EXTINCTION_VARIANT,
+#endif
+#ifdef GRID
+  GRID_VARIANT,
 #endif
 #ifdef HORDE
   HORDE_VARIANT,
@@ -157,6 +160,9 @@ enum Variant {
 #ifdef LOOP
   LOOP_VARIANT,
 #endif
+#ifdef TWOKINGSSYMMETRIC
+  TWOKINGSSYMMETRIC_VARIANT,
+#endif
   SUBVARIANT_NB,
 };
 
@@ -175,6 +181,9 @@ static std::vector<std::string> variants = {
 #endif
 #ifdef EXTINCTION
 "extinction",
+#endif
+#ifdef GRID
+"grid",
 #endif
 #ifdef HORDE
 "horde",
@@ -206,6 +215,9 @@ static std::vector<std::string> variants = {
 #endif
 #ifdef LOOP
 "loop",
+#endif
+#ifdef TWOKINGSSYMMETRIC
+"twokingssymmetric",
 #endif
 };
 
@@ -333,12 +345,19 @@ enum Value : int {
   QueenValueMgHouse  = 832,   QueenValueEgHouse  = 1046,
 #endif
 #ifdef EXTINCTION
-  PawnValueMgExtinction   = 250,    PawnValueEgExtinction   = 250,
-  KnightValueMgExtinction = 1000,   KnightValueEgExtinction = 1000,
-  BishopValueMgExtinction = 1000,   BishopValueEgExtinction = 1000,
-  RookValueMgExtinction   = 1000,   RookValueEgExtinction   = 1000,
-  QueenValueMgExtinction  = 2000,   QueenValueEgExtinction  = 2000,
-  KingValueMgExtinction   = 1000,   KingValueEgExtinction   = 1000,
+  PawnValueMgExtinction   = 209,   PawnValueEgExtinction   = 208,
+  KnightValueMgExtinction = 823,   KnightValueEgExtinction = 1091,
+  BishopValueMgExtinction = 1097,  BishopValueEgExtinction = 1055,
+  RookValueMgExtinction   = 726,   RookValueEgExtinction   = 950,
+  QueenValueMgExtinction  = 2111,  QueenValueEgExtinction  = 2014,
+  KingValueMgExtinction   = 919,   KingValueEgExtinction   = 1093,
+#endif
+#ifdef GRID
+  PawnValueMgGrid   = 51,    PawnValueEgGrid   = 72,
+  KnightValueMgGrid = 982,   KnightValueEgGrid = 900,
+  BishopValueMgGrid = 690,   BishopValueEgGrid = 781,
+  RookValueMgGrid   = 1018,  RookValueEgGrid   = 1094,
+  QueenValueMgGrid  = 2568,  QueenValueEgGrid  = 2354,
 #endif
 #ifdef HORDE
   PawnValueMgHorde   = 321,   PawnValueEgHorde   = 326,
@@ -381,7 +400,7 @@ enum Value : int {
   BishopValueMgTwoKings = 826,   BishopValueEgTwoKings = 891,
   RookValueMgTwoKings   = 1282,  RookValueEgTwoKings   = 1373,
   QueenValueMgTwoKings  = 2526,  QueenValueEgTwoKings  = 2646,
-  KingValueMgTwoKings   = 1000,  KingValueEgTwoKings   = 1000,
+  KingValueMgTwoKings   = 526,   KingValueEgTwoKings   = 780,
 #endif
 
   MidgameLimit  = 15258, EndgameLimit  = 3915
@@ -635,7 +654,7 @@ inline Square to_sq(Move m) {
 inline int from_to(Move m) {
 #ifdef CRAZYHOUSE
   if (type_of(m) == DROP)
-      return (m & 0xFFF) + 0x1000;
+      return (m & 0x3F) + 0x1000;
 #endif
  return m & 0xFFF;
 }
@@ -708,6 +727,10 @@ inline Variant main_variant(Variant v) {
 #ifdef LOOP
   case LOOP_VARIANT:
       return CRAZYHOUSE_VARIANT;
+#endif
+#ifdef TWOKINGSSYMMETRIC
+  case TWOKINGSSYMMETRIC_VARIANT:
+      return TWOKINGS_VARIANT;
 #endif
   default:
       assert(false);

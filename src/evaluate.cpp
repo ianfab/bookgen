@@ -234,6 +234,23 @@ namespace {
         S( 111, 177), S( 115,181), S(124,197), S(124,199) }
     },
 #endif
+#ifdef GRID
+    {
+      { S(-75,-76), S(-57,-54), S( -9,-28), S( -2,-10), S(  6,  5), S( 14, 12), // Knights
+        S( 22, 26), S( 29, 29), S( 36, 29) },
+      { S(-48,-59), S(-20,-23), S( 16, -3), S( 26, 13), S( 38, 24), S( 51, 42), // Bishops
+        S( 55, 54), S( 63, 57), S( 63, 65), S( 68, 73), S( 81, 78), S( 81, 86),
+        S( 91, 88), S( 98, 97) },
+      { S(-58,-76), S(-27,-18), S(-15, 28), S(-10, 55), S( -5, 69), S( -2, 82), // Rooks
+        S(  9,112), S( 16,118), S( 30,132), S( 29,142), S( 32,155), S( 38,165),
+        S( 46,166), S( 48,169), S( 58,171) },
+      { S(-39,-36), S(-21,-15), S(  3,  8), S(  3, 18), S( 14, 34), S( 22, 54), // Queens
+        S( 28, 61), S( 41, 73), S( 43, 79), S( 48, 92), S( 56, 94), S( 60,104),
+        S( 60,113), S( 66,120), S( 67,123), S( 70,126), S( 71,133), S( 73,136),
+        S( 79,140), S( 88,143), S( 88,148), S( 99,166), S(102,170), S(102,175),
+        S(106,184), S(109,191), S(113,206), S(116,212) }
+    },
+#endif
 #ifdef HORDE
     {
       { S(-126,-90), S( -7,-22), S( -46,-25), S( 19,7), S( -53, 71), S( 31, -1), // Knights
@@ -414,6 +431,12 @@ namespace {
       { V(7), V(14), V(38), V(73), V(166), V(252) }
     },
 #endif
+#ifdef GRID
+    {
+      { V(5), V( 5), V(31), V(73), V(166), V(252) },
+      { V(7), V(14), V(38), V(73), V(166), V(252) }
+    },
+#endif
 #ifdef HORDE
     {
       { V(-66), V(-25), V( 66), V(68), V( 72), V(250) },
@@ -545,6 +568,9 @@ namespace {
 #ifdef EXTINCTION
     S( 0,  0),
 #endif
+#ifdef GRID
+    S( 7,  0),
+#endif
 #ifdef HORDE
     S( 7,  0),
 #endif
@@ -595,6 +621,9 @@ namespace {
 #ifdef EXTINCTION
     {},
 #endif
+#ifdef GRID
+    { 0, 0, 78, 56, 45, 11 },
+#endif
 #ifdef HORDE
     { 0, 0, 78, 56, 45, 11 },
 #endif
@@ -633,6 +662,9 @@ namespace {
 #ifdef EXTINCTION
     {},
 #endif
+#ifdef GRID
+    {   102,  191,  143, -848,   -9,   40,    0 },
+#endif
 #ifdef HORDE
     {   101,  235,  134, -717,  -11,   -5,    0 },
 #endif
@@ -652,7 +684,7 @@ namespace {
     {    85,  136,  106, -613,   -7,  -73,  181 },
 #endif
 #ifdef TWOKINGS
-    {   102,  191,  143, -848,   -9,   40,    0 },
+    {    92,  155,  136, -967,   -8,   38,    0 },
 #endif
   };
 
@@ -683,6 +715,9 @@ namespace {
     Value(12222),
 #endif
 #ifdef EXTINCTION
+    Value(12222),
+#endif
+#ifdef GRID
     Value(12222),
 #endif
 #ifdef HORDE
@@ -929,7 +964,7 @@ namespace {
                                        : AllSquares ^ Rank1BB ^ Rank2BB ^ Rank3BB);
 
     const Square ksq = pos.square<KING>(Us);
-    Bitboard kingOnlyDefended, undefended, b, b1, b2, safe, other;
+    Bitboard weak, b, b1, b2, safe, other;
     int kingDanger;
 
     // King shelter and enemy pawns storm
@@ -943,23 +978,15 @@ namespace {
 #endif
     )
     {
-        // Find the attacked squares which are defended only by our king...
 #ifdef ATOMIC
         if (pos.is_atomic())
-            kingOnlyDefended =  (attackedBy[Them][ALL_PIECES]
-                                 | (pos.pieces(Them) ^ pos.pieces(Them, KING)))
-                              & attackedBy[Us][KING];
+            weak =  (attackedBy[Them][ALL_PIECES] | (pos.pieces(Them) ^ pos.pieces(Them, KING)))
+                  & (attackedBy[Us][KING] | (attackedBy[Us][QUEEN] & ~attackedBy2[Us]) | ~attackedBy[Us][ALL_PIECES]);
         else
 #endif
-        kingOnlyDefended =   attackedBy[Them][ALL_PIECES]
-                          &  attackedBy[Us][KING]
-                          & ~attackedBy2[Us];
-
-        // ... and those which are not defended at all in the larger king ring
-        undefended =   attackedBy[Them][ALL_PIECES]
-                    & ~attackedBy[Us][ALL_PIECES]
-                    &  kingRing[Us]
-                    & ~pos.pieces(Them);
+        weak =  attackedBy[Them][ALL_PIECES]
+              & ~attackedBy2[Us]
+              & (attackedBy[Us][KING] | attackedBy[Us][QUEEN] | ~attackedBy[Us][ALL_PIECES]);
 
         // Initialize the 'kingDanger' variable, which will be transformed
         // later into a king danger score. The initial value is based on the
@@ -969,7 +996,7 @@ namespace {
         const auto KDP = KingDangerParams[pos.variant()];
         kingDanger =           kingAttackersCount[Them] * kingAttackersWeight[Them]
                     + KDP[0] * kingAdjacentZoneAttacksCount[Them]
-                    + KDP[1] * popcount(kingOnlyDefended | undefended)
+                    + KDP[1] * popcount(kingRing[Us] & weak)
                     + KDP[2] * !!pos.pinned_pieces(Us)
                     + KDP[3] * !pos.count<QUEEN>(Them)
                     + KDP[4] * mg_value(score) / 8
@@ -985,13 +1012,13 @@ namespace {
             kingDanger += KingDangerInHand[BISHOP] * pos.count_in_hand<BISHOP>(Them);
             kingDanger += KingDangerInHand[ROOK] * pos.count_in_hand<ROOK>(Them);
             kingDanger += KingDangerInHand[QUEEN] * pos.count_in_hand<QUEEN>(Them);
-            h = pos.count_in_hand<QUEEN>(Them) ? kingOnlyDefended & ~pos.pieces() : 0;
+            h = pos.count_in_hand<QUEEN>(Them) ? weak & ~pos.pieces() : 0;
         }
 #endif
 
         // Analyse the safe enemy's checks which are possible on next move
         safe  = ~pos.pieces(Them);
-        safe &= ~attackedBy[Us][ALL_PIECES] | (kingOnlyDefended & attackedBy2[Them]);
+        safe &= ~attackedBy[Us][ALL_PIECES] | (weak & attackedBy2[Them]);
 #ifdef ATOMIC
         if (pos.is_atomic())
             safe |= attackedBy[Us][KING];
@@ -1001,7 +1028,7 @@ namespace {
         b2 = pos.attacks_from<BISHOP>(ksq);
 
         // Enemy queen safe checks
-        if ((b1 | b2) & (h | attackedBy[Them][QUEEN]) & safe)
+        if ((b1 | b2) & (h | attackedBy[Them][QUEEN]) & safe & ~attackedBy[Us][QUEEN])
             kingDanger += QueenCheck;
 
         // Defended by our queen only
@@ -1071,6 +1098,8 @@ namespace {
 #endif
             int v = kingDanger * kingDanger / 4096;
 #ifdef CRAZYHOUSE
+            if (pos.is_house() && Us == pos.side_to_move())
+                v -= v / 10;
             if (pos.is_house() && v > QueenValueMg)
                 v = QueenValueMg;
 #endif
