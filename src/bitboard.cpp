@@ -181,7 +181,7 @@ void Bitboards::init() {
               DistanceRingBB[s1][SquareDistance[s1][s2] - 1] |= s2;
           }
 
-  int steps[][5] = { {}, { 7, 9 }, { 6, 10, 15, 17 }, {}, {}, {}, { 1, 7, 8, 9 } };
+  int steps[][5] = { {}, { 7, 9 }, { 6, 10, 15, 17 }, {}, {}, {}, {}, {}, { 1, 7, 8, 9 } };
 
   for (Color c = WHITE; c <= BLACK; ++c)
       for (PieceType pt : { PAWN, KNIGHT, KING })
@@ -209,6 +209,9 @@ void Bitboards::init() {
   {
       PseudoAttacks[QUEEN][s1]  = PseudoAttacks[BISHOP][s1] = attacks_bb<BISHOP>(s1, 0);
       PseudoAttacks[QUEEN][s1] |= PseudoAttacks[  ROOK][s1] = attacks_bb<  ROOK>(s1, 0);
+
+      PseudoAttacks[HAWK][s1]     = PseudoAttacks[KNIGHT][s1] | PseudoAttacks[BISHOP][s1];
+      PseudoAttacks[ELEPHANT][s1] = PseudoAttacks[KNIGHT][s1] | PseudoAttacks[ROOK][s1];
 
       for (PieceType pt : { BISHOP, ROOK })
           for (Square s2 = SQ_A1; s2 <= SQ_H8; ++s2)

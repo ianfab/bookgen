@@ -468,19 +468,22 @@ string UCI::move(Move m, bool chess960) {
   if (m == MOVE_NULL)
       return "0000";
 
-  if (gating_on_castling_rook(m))
-      from = to_sq(m), to = from_sq(m);
+  else if (type_of(m) == CASTLING)
+  {
+      if (gating_on_to_sq(m))
+          from = to_sq(m), to = from_sq(m);
 
-  else if (type_of(m) == CASTLING && !chess960)
-      to = make_square(to > from ? FILE_G : FILE_C, rank_of(from));
+      if (!chess960)
+          to = make_square(to > from ? FILE_G : FILE_C, rank_of(from));
+  }
 
   string move = UCI::square(from) + UCI::square(to);
 
   if (type_of(m) == PROMOTION)
-      move += " pnbrqkhe"[promotion_type(m)];
+      move += " pnbrheqk"[promotion_type(m)];
 
   else if (is_gating(m))
-      move += " pnbrqkhe"[gating_type(m)];
+      move += " pnbrheqk"[gating_type(m)];
 
   return move;
 }

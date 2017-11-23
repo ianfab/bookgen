@@ -45,7 +45,6 @@ struct StateInfo {
   int    pliesFromNull;
   Score  psq;
   Square epSquare;
-  int    inHand[COLOR_NB][2];
   Bitboard gatesBB;
 
   // Not copied when making a move (will be recomputed anyhow)
@@ -106,8 +105,7 @@ public:
   int can_castle(CastlingRight cr) const;
   bool castling_impeded(CastlingRight cr) const;
   Square castling_rook_square(CastlingRight cr) const;
-  bool has_hawk(Color c) const;
-  bool has_elephant(Color c) const;
+  bool in_hand(Color c, PieceType pt) const;
   Bitboard gates(Color c) const;
 
   // Checking
@@ -188,6 +186,7 @@ private:
   Piece board[SQUARE_NB];
   Bitboard byTypeBB[PIECE_TYPE_NB];
   Bitboard byColorBB[COLOR_NB];
+  bool inHand[PIECE_NB];
   int pieceCount[PIECE_NB];
   Square pieceList[PIECE_NB][16];
   int index[SQUARE_NB];
@@ -272,12 +271,8 @@ inline Square Position::ep_square() const {
   return st->epSquare;
 }
 
-inline bool Position::has_hawk(Color c) const {
-  return st->inHand[c][0];
-}
-
-inline bool Position::has_elephant(Color c) const {
-  return st->inHand[c][1];
+inline bool Position::in_hand(Color c, PieceType pt) const {
+  return inHand[make_piece(c, pt)];
 }
 
 inline Bitboard Position::gates(Color c) const {
@@ -304,9 +299,9 @@ template<PieceType Pt>
 inline Bitboard Position::attacks_from(Square s) const {
   assert(Pt != PAWN);
   return  Pt == BISHOP || Pt == ROOK ? attacks_bb<Pt>(s, byTypeBB[ALL_PIECES])
-        : Pt == QUEEN    ? attacks_from<ROOK>(s) | attacks_from<BISHOP>(s)
         : Pt == HAWK     ? PseudoAttacks[KNIGHT][s] | attacks_from<BISHOP>(s)
         : Pt == ELEPHANT ? PseudoAttacks[KNIGHT][s] | attacks_from<  ROOK>(s)
+        : Pt == QUEEN    ? attacks_from<ROOK>(s) | attacks_from<BISHOP>(s)
         : PseudoAttacks[Pt][s];
 }
 
@@ -438,13 +433,13 @@ inline void Position::remove_piece(Piece pc, Square s) {
 }
 
 inline void Position::add_to_hand(Color c, PieceType pt) {
-  assert(pt == HAWK || pt == ELEPHANT);
-  st->inHand[c][pt == ELEPHANT]++;
+  assert(pt >= HAWK && pt <= QUEEN);
+  inHand[make_piece(c, pt)] = true;
 }
 
 inline void Position::remove_from_hand(Color c, PieceType pt) {
-  assert(pt == HAWK || pt == ELEPHANT);
-  st->inHand[c][pt == ELEPHANT]--;
+  assert(pt >= HAWK && pt <= QUEEN);
+  inHand[make_piece(c, pt)] = false;
 }
 
 inline void Position::move_piece(Piece pc, Square from, Square to) {

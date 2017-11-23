@@ -37,23 +37,26 @@
 using std::string;
 
 namespace PSQT {
-  extern Score psq[PIECE_NB][SQUARE_NB + 1];
+  extern Score psq[PIECE_NB][SQUARE_NB];
+  extern Score inhand[PIECE_NB];
 }
 
 namespace Zobrist {
 
-  Key psq[PIECE_NB][SQUARE_NB + 1];
+  Key psq[PIECE_NB][SQUARE_NB];
+  Key inhand[PIECE_NB];
   Key enpassant[FILE_NB];
+  Key gate[SQUARE_NB];
   Key castling[CASTLING_RIGHT_NB];
   Key side, noPawns;
 }
 
 namespace {
 
-const string PieceToChar(" PNBRQKHE pnbrqkhe");
+const string PieceToChar(" PNBRHEQK pnbrheqk");
 
-const Piece Pieces[] = { W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING, W_HAWK, W_ELEPHANT,
-                         B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING, B_HAWK, B_ELEPHANT };
+const Piece Pieces[] = { W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_HAWK, W_ELEPHANT, W_QUEEN, W_KING,
+                         B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_HAWK, B_ELEPHANT, B_QUEEN, B_KING };
 
 // min_attacker() is a helper function used by see_ge() to locate the least
 // valuable attacker for the side to move, remove the attacker we just found
@@ -65,15 +68,15 @@ PieceType min_attacker(const Bitboard* bb, Square to, Bitboard stmAttackers,
 
   Bitboard b = stmAttackers & bb[Pt];
   if (!b)
-      return min_attacker<Pt == ELEPHANT ? QUEEN : (Pt == ROOK ? HAWK : Pt + 1)>(bb, to, stmAttackers, occupied, attackers);
+      return min_attacker<Pt + 1>(bb, to, stmAttackers, occupied, attackers);
 
   occupied ^= b & ~(b - 1);
 
-  if (Pt == PAWN || Pt == BISHOP || Pt == QUEEN || Pt == HAWK)
-      attackers |= attacks_bb<BISHOP>(to, occupied) & (bb[BISHOP] | bb[QUEEN] | bb[HAWK]);
+  if (Pt == PAWN || Pt == BISHOP || Pt == HAWK || Pt == QUEEN)
+      attackers |= attacks_bb<BISHOP>(to, occupied) & (bb[BISHOP] | bb[HAWK] | bb[QUEEN]);
 
-  if (Pt == ROOK || Pt == QUEEN || Pt == ELEPHANT)
-      attackers |= attacks_bb<ROOK>(to, occupied) & (bb[ROOK] | bb[QUEEN] | bb[ELEPHANT]);
+  if (Pt == ROOK || Pt == ELEPHANT || Pt == QUEEN)
+      attackers |= attacks_bb<ROOK>(to, occupied) & (bb[ROOK] | bb[ELEPHANT] | bb[QUEEN]);
 
   attackers &= occupied; // After X-ray that may add already processed pieces
   return (PieceType)Pt;
@@ -133,11 +136,17 @@ void Position::init() {
   PRNG rng(1070372);
 
   for (Piece pc : Pieces)
-      for (Square s = SQ_A1; s <= SQUARE_NB; ++s)
+  {
+      for (Square s = SQ_A1; s < SQUARE_NB; ++s)
           Zobrist::psq[pc][s] = rng.rand<Key>();
+      Zobrist::inhand[pc] = rng.rand<Key>();
+  }
 
   for (File f = FILE_A; f <= FILE_H; ++f)
       Zobrist::enpassant[f] = rng.rand<Key>();
+
+  for (Square s = SQ_A1; s < SQUARE_NB; ++s)
+      Zobrist::gate[s] = rng.rand<Key>();
 
   for (int cr = NO_CASTLING; cr <= ANY_CASTLING; ++cr)
   {
@@ -222,15 +231,17 @@ Position& Position::set(const string& fenStr, bool isChess960, StateInfo* si, Th
           ++sq;
       }
       else if (token == '[')
+      {
+          // Pieces in hand
+          while ((ss >> token) && !isspace(token))
+          {
+              if (token == ']')
+                  continue;
+              else if ((idx = PieceToChar.find(token)) != string::npos)
+                  add_to_hand(color_of(Piece(idx)), type_of(Piece(idx)));
+          }
           break;
-  }
-
-  while ((ss >> token) && !isspace(token))
-  {
-      if (token == ']')
-          continue;
-      else if ((idx = PieceToChar.find(token)) != string::npos)
-          add_to_hand(color_of(Piece(idx)), type_of(Piece(idx)));
+      }
   }
 
   // 2. Active color
@@ -277,6 +288,11 @@ Position& Position::set(const string& fenStr, bool isChess960, StateInfo* si, Th
 
       set_castling_right(c, rsq);
   }
+
+  // Remove any possible gating squares if no pieces in hand
+  for (Color c = WHITE; c <= BLACK; ++c)
+      if (!in_hand(c, HAWK) && !in_hand(c, ELEPHANT) && !in_hand(c, QUEEN))
+          st->gatesBB ^= gates(c);
 
   // 4. En passant square. Ignore if no pawn capture is possible
   if (   ((ss >> col) && (col >= 'a' && col <= 'h'))
@@ -348,10 +364,10 @@ void Position::set_check_info(StateInfo* si) const {
   si->checkSquares[KNIGHT]    = attacks_from<KNIGHT>(ksq);
   si->checkSquares[BISHOP]    = attacks_from<BISHOP>(ksq);
   si->checkSquares[ROOK]      = attacks_from<ROOK>(ksq);
-  si->checkSquares[QUEEN]     = si->checkSquares[BISHOP] | si->checkSquares[ROOK];
-  si->checkSquares[KING]      = 0;
   si->checkSquares[HAWK]      = si->checkSquares[KNIGHT] | si->checkSquares[BISHOP];
   si->checkSquares[ELEPHANT]  = si->checkSquares[KNIGHT] | si->checkSquares[ROOK];
+  si->checkSquares[QUEEN]     = si->checkSquares[BISHOP] | si->checkSquares[ROOK];
+  si->checkSquares[KING]      = 0;
 }
 
 
@@ -377,10 +393,17 @@ void Position::set_state(StateInfo* si) const {
       si->key ^= Zobrist::psq[pc][s];
       si->psq += PSQT::psq[pc][s];
   }
-  si->psq += PSQT::psq[W_HAWK][SQUARE_NB] * si->inHand[WHITE][0] + PSQT::psq[W_ELEPHANT][SQUARE_NB] * si->inHand[WHITE][1];
-  si->psq += PSQT::psq[B_HAWK][SQUARE_NB] * si->inHand[BLACK][0] + PSQT::psq[B_ELEPHANT][SQUARE_NB] * si->inHand[BLACK][1];
-  si->key ^= Zobrist::psq[W_HAWK][SQUARE_NB] * si->inHand[WHITE][0] ^ Zobrist::psq[W_ELEPHANT][SQUARE_NB] * si->inHand[WHITE][1];
-  si->key ^= Zobrist::psq[B_HAWK][SQUARE_NB] * si->inHand[WHITE][0] ^ Zobrist::psq[B_ELEPHANT][SQUARE_NB] * si->inHand[WHITE][1];
+
+  for (Bitboard b = si->gatesBB; b; )
+      si->key ^= Zobrist::gate[pop_lsb(&b)];
+
+  for (Color c = WHITE; c <= BLACK; ++c)
+      for (PieceType pt : {HAWK, ELEPHANT, QUEEN})
+          if (in_hand(c, pt))
+          {
+              si->psq += PSQT::inhand[make_piece(c, pt)];
+              si->key ^= Zobrist::inhand[make_piece(c, pt)];
+          }
 
   if (si->epSquare != SQ_NONE)
       si->key ^= Zobrist::enpassant[file_of(si->epSquare)];
@@ -456,8 +479,8 @@ const string Position::fen() const {
 
   ss << '[';
   for (Color c = WHITE; c <= BLACK; ++c)
-      for (PieceType pt = HAWK; pt <= ELEPHANT; ++pt)
-          ss << std::string(st->inHand[c][pt == ELEPHANT], PieceToChar[make_piece(c, pt)]);
+      for (PieceType pt = HAWK; pt <= QUEEN; ++pt)
+          ss << std::string(in_hand(c, pt), PieceToChar[make_piece(c, pt)]);
   ss << ']';
 
   ss << (sideToMove == WHITE ? " w " : " b ");
@@ -537,9 +560,9 @@ Bitboard Position::attackers_to(Square s, Bitboard occupied) const {
 
   return  (attacks_from<PAWN>(s, BLACK)    & pieces(WHITE, PAWN))
         | (attacks_from<PAWN>(s, WHITE)    & pieces(BLACK, PAWN))
-        | (attacks_from<KNIGHT>(s)         & pieces(KNIGHT,  HAWK, ELEPHANT))
-        | (attacks_bb<  ROOK>(s, occupied) & pieces(  ROOK, QUEEN, ELEPHANT))
-        | (attacks_bb<BISHOP>(s, occupied) & pieces(BISHOP, QUEEN, HAWK))
+        | (attacks_from<KNIGHT>(s)         & pieces(KNIGHT, HAWK, ELEPHANT))
+        | (attacks_bb<  ROOK>(s, occupied) & pieces(ROOK, ELEPHANT, QUEEN))
+        | (attacks_bb<BISHOP>(s, occupied) & pieces(BISHOP, HAWK, QUEEN))
         | (attacks_from<KING>(s)           & pieces(KING));
 }
 
@@ -602,9 +625,10 @@ bool Position::pseudo_legal(const Move m) const {
   // Use a slower but simpler function for uncommon cases
   if (type_of(m) != NORMAL)
       return MoveList<LEGAL>(*this).contains(m);
-
-  // Is not a promotion, so promotion piece must be empty
-  if (promotion_type(m) - KNIGHT != NO_PIECE_TYPE)
+  
+  // If the move gates a piece make sure we have that piece in hand
+  // and that we are allowed to gate on the from square.
+  if (gating_type(m) != NO_GATE_TYPE && !(in_hand(us, gating_type(m)) && (gates(us) & from)))
       return false;
 
   // If the 'from' square is not occupied by a piece belonging to the side to
@@ -681,7 +705,7 @@ bool Position::gives_check(Move m) const {
 
   // Is there a check by gated pieces?
   if (    is_gating(m)
-      && (st->checkSquares[gating_type(m)] & (gating_on_castling_rook(m) ? to_sq(m) : from_sq(m)))
+      && (st->checkSquares[gating_type(m)] & (gating_on_to_sq(m) ? to_sq(m) : from_sq(m)))
       && !aligned(from, to, square<KING>(~sideToMove)))
       return true;
 
@@ -758,6 +782,9 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
   assert(captured == NO_PIECE || color_of(captured) == (type_of(m) != CASTLING ? them : us));
   assert(type_of(captured) != KING);
 
+  // Remove gates. This might be too many gates when castling in Chess960!
+  Bitboard lostGates = st->gatesBB & (SquareBB[from] | SquareBB[to]);
+
   if (type_of(m) == CASTLING)
   {
       assert(pc == make_piece(us, KING));
@@ -765,6 +792,13 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
 
       Square rfrom, rto;
       do_castling<true>(us, from, to, rfrom, rto);
+
+      // Prevent gates being incorrectly removed in obscure Chess960 cases
+      if (is_chess960())
+      {
+          if (from  == to ) lostGates &= ~SquareBB[from ];
+          if (rfrom == rto) lostGates &= ~SquareBB[rfrom];
+      }
 
       st->psq += PSQT::psq[captured][rto] - PSQT::psq[captured][rfrom];
       k ^= Zobrist::psq[captured][rfrom] ^ Zobrist::psq[captured][rto];
@@ -850,7 +884,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
           Piece promotion = make_piece(us, promotion_type(m));
 
           assert(relative_rank(us, to) == RANK_8);
-          assert(type_of(promotion) >= KNIGHT && type_of(promotion) <= ELEPHANT);
+          assert(type_of(promotion) >= KNIGHT && type_of(promotion) <= QUEEN);
 
           remove_piece(pc, to);
           put_piece(promotion, to);
@@ -876,34 +910,35 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       st->rule50 = 0;
   }
 
+  else if (gating_type(m) != NO_GATE_TYPE) // Safe because m is not a pawn move
+  {
+      assert(gating_type(m) >= HAWK && gating_type(m) <= QUEEN);
+
+      Square gating_square = gating_on_to_sq(m) ? to_sq(m) : from_sq(m);
+      Piece gating_piece = make_piece(sideToMove, gating_type(m));
+      put_piece(gating_piece, gating_square);
+      remove_from_hand(sideToMove, gating_type(m));
+      st->psq += PSQT::psq[gating_piece][gating_square] - PSQT::inhand[gating_piece];
+      k ^= Zobrist::psq[gating_piece][gating_square] ^ Zobrist::inhand[gating_piece];
+      st->materialKey ^= Zobrist::psq[gating_piece][pieceCount[gating_piece]-1];
+      st->nonPawnMaterial[us] += PieceValue[MG][gating_piece];
+      if (!in_hand(us, HAWK) && !in_hand(us, ELEPHANT) && !in_hand(us, QUEEN))
+          lostGates |= gates(us);
+  }
+
+  // Update gates
+  if (lostGates)
+  {
+      st->gatesBB ^= lostGates;
+      while (lostGates)
+          k ^= Zobrist::gate[pop_lsb(&lostGates)];
+  }
+
   // Update incremental scores
   st->psq += PSQT::psq[pc][to] - PSQT::psq[pc][from];
 
   // Set capture piece
   st->capturedPiece = captured;
-
-  // Add gating piece
-  if (is_gating(m))
-  {
-      assert(gating_type(m) == HAWK || gating_type(m) == ELEPHANT);
-
-      Square gating_square = gating_on_castling_rook(m) ? to_sq(m) : from_sq(m);
-      Piece gating_piece = make_piece(sideToMove, gating_type(m));
-      put_piece(gating_piece, gating_square);
-      remove_from_hand(sideToMove, gating_type(m));
-      st->gatesBB = st->gatesBB & ~SquareBB[gating_square];
-      st->psq +=  PSQT::psq[gating_piece][gating_square]
-                - PSQT::psq[gating_piece][SQUARE_NB];
-      k ^= Zobrist::psq[gating_piece][gating_square] ^ Zobrist::psq[gating_piece][SQUARE_NB];
-      st->materialKey ^= Zobrist::psq[gating_piece][pieceCount[gating_piece]];
-      st->nonPawnMaterial[us] += PieceValue[MG][gating_piece];
-  }
-
-  // Remove gate
-  if (gates(us) & from)
-      st->gatesBB ^= from;
-  if (type_of(m) == CASTLING || (gates(them) & to))
-      st->gatesBB ^= to;
 
   // Update the key with the final value
   st->key = k;
@@ -940,18 +975,17 @@ void Position::undo_move(Move m) {
   // Remove gated piece
   if (is_gating(m))
   {
-      Square gating_square = gating_on_castling_rook(m) ? to_sq(m) : from_sq(m);
+      Square gating_square = gating_on_to_sq(m) ? to_sq(m) : from_sq(m);
       Piece gating_piece = make_piece(sideToMove, gating_type(m));
       remove_piece(gating_piece, gating_square);
       add_to_hand(sideToMove, gating_type(m));
-      st->gatesBB = st->gatesBB | gating_square;
   }
 
   if (type_of(m) == PROMOTION)
   {
       assert(relative_rank(us, to) == RANK_8);
       assert(type_of(pc) == promotion_type(m));
-      assert(type_of(pc) >= KNIGHT && type_of(pc) <= ELEPHANT);
+      assert(type_of(pc) >= KNIGHT && type_of(pc) <= QUEEN);
 
       remove_piece(pc, to);
       pc = make_piece(us, PAWN);
@@ -1090,17 +1124,21 @@ bool Position::see_ge(Move m, Value threshold) const {
   Value balance; // Values of the pieces taken by us minus opponent's ones
   Bitboard occupied, stmAttackers;
 
-  balance = PieceValue[MG][piece_on(to)];
+  // The opponent may be able to recapture so this is the best result
+  // we can hope for.
+  balance = PieceValue[MG][piece_on(to)] - threshold;
 
-  if (balance < threshold)
+  if (balance < VALUE_ZERO)
       return false;
 
+  // Now assume the worst possible result: that the opponent can
+  // capture our piece for free.
   balance -= PieceValue[MG][nextVictim];
 
-  if (balance >= threshold) // Always true if nextVictim == KING
+  if (balance >= VALUE_ZERO) // Always true if nextVictim == KING
       return true;
 
-  bool relativeStm = true; // True if the opponent is to move
+  bool opponentToMove = true;
   occupied = pieces() ^ from ^ to;
 
   // Find all attackers to the destination square, with the moving piece removed,
@@ -1109,6 +1147,12 @@ bool Position::see_ge(Move m, Value threshold) const {
 
   while (true)
   {
+      // The balance is negative only because we assumed we could win
+      // the last piece for free. We are truly winning only if we can
+      // win the last piece _cheaply enough_. Test if we can actually
+      // do this otherwise "give up".
+      assert(balance < VALUE_ZERO);
+
       stmAttackers = attackers & pieces(stm);
 
       // Don't allow pinned pieces to attack pieces except the king as long all
@@ -1116,25 +1160,43 @@ bool Position::see_ge(Move m, Value threshold) const {
       if (!(st->pinnersForKing[stm] & ~occupied))
           stmAttackers &= ~st->blockersForKing[stm];
 
+      // If we have no more attackers we must give up
       if (!stmAttackers)
-          return relativeStm;
+          break;
 
       // Locate and remove the next least valuable attacker
       nextVictim = min_attacker<PAWN>(byTypeBB, to, stmAttackers, occupied, attackers);
 
+      if (nextVictim == KING && stm == sideToMove && is_gating(m) && (gating_type(m) == HAWK ? attacks_bb<HAWK>(from, occupied) : attacks_bb<ELEPHANT>(from, occupied)))
+          nextVictim = gating_type(m);
       if (nextVictim == KING)
-          return relativeStm == bool(attackers & pieces(~stm));
+      {
+          // Our only attacker is the king. If the opponent still has
+          // attackers we must give up. Otherwise we make the move and
+          // (having no more attackers) the opponent must give up.
+          if (   !(attackers & pieces(~stm))
+              && !(~stm == sideToMove && is_gating(m) && (gating_type(m) == HAWK ? attacks_bb<HAWK>(from, occupied) : attacks_bb<ELEPHANT>(from, occupied))))
+              opponentToMove = !opponentToMove;
+          break;
+      }
 
-      balance += relativeStm ?  PieceValue[MG][nextVictim]
-                             : -PieceValue[MG][nextVictim];
+      // Assume the opponent can win the next piece for free and switch sides
+      balance += PieceValue[MG][nextVictim];
+      opponentToMove = !opponentToMove;
 
-      relativeStm = !relativeStm;
+      // If balance is negative after receiving a free piece then give up
+      if (balance < VALUE_ZERO)
+          break;
 
-      if (relativeStm == (balance >= threshold))
-          return relativeStm;
-
+      // Complete the process of switching sides. The first line swaps
+      // all negative numbers with non-negative numbers. The compiler
+      // probably knows that it is just the bitwise negation ~balance.
+      balance = -balance-1;
       stm = ~stm;
   }
+
+  // If the opponent gave up we win, otherwise we lose.
+  return opponentToMove;
 }
 
 
@@ -1234,8 +1296,8 @@ bool Position::pos_is_ok() const {
 
   if (   (pieces(WHITE) & pieces(BLACK))
       || (pieces(WHITE) | pieces(BLACK)) != pieces()
-      || popcount(pieces(WHITE)) > 16
-      || popcount(pieces(BLACK)) > 16)
+      || popcount(pieces(WHITE)) > 18
+      || popcount(pieces(BLACK)) > 18)
       assert(0 && "pos_is_ok: Bitboards");
 
   for (PieceType p1 = PAWN; p1 <= KING; ++p1)

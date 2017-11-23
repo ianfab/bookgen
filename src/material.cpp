@@ -32,30 +32,29 @@ namespace {
   // Polynomial material imbalance parameters
 
   const int QuadraticOurs[][PIECE_TYPE_NB] = {
-    //            OUR PIECES
-    // pair pawn knight bishop rook queen
-    {1667                               }, // Bishop pair
-    {  40,    0                         }, // Pawn
-    {  32,  255,  -3                    }, // Knight      OUR PIECES
-    {   0,  104,   4,    0              }, // Bishop
-    { -26,   -2,  47,   105,  -149      }, // Rook
-    {-185,   24, 122,   137,  -134,   0 }  // Queen
+    //                     OUR PIECES
+    // pair pawn knight  bishop   rook  hawk elephant queen
+    {1667                                                  }, // Bishop pair
+    {  40,     0                                           }, // Pawn
+    {  32,   255,    -3                                    }, // Knight
+    {   0,   104,     4,     0                             }, // Bishop      OUR PIECES
+    { -26,    -2,    47,   105,  -149                      }, // Rook
+    {   0,     0,     0,     0,     0,     0               }, // Hawk
+    {   0,     0,     0,     0,     0,     0,     0        }, // Elephant
+    {-185,    24,   122,   137,  -134,     0,     0,     0 }  // Queen
   };
 
   const int QuadraticTheirs[][PIECE_TYPE_NB] = {
-    //           THEIR PIECES
-    // pair pawn knight bishop rook queen
-    {   0                               }, // Bishop pair
-    {  36,    0                         }, // Pawn
-    {   9,   63,   0                    }, // Knight      OUR PIECES
-    {  59,   65,  42,     0             }, // Bishop
-    {  46,   39,  24,   -24,    0       }, // Rook
-    { 101,  100, -37,   141,  268,    0 }  // Queen
-  };
-
-  // PawnSet[pawn count] contains a bonus/malus indexed by number of pawns
-  const int PawnSet[] = {
-    24, -32, 107, -51, 117, -9, -126, -21, 31
+    //                    THEIR PIECES
+    // pair pawn knight  bishop   rook  hawk elephant queen
+    {   0                                                  }, // Bishop pair
+    {  36,     0                                           }, // Pawn
+    {   9,    63,     0                                    }, // Knight
+    {  59,    65,    42,     0                             }, // Bishop      OUR PIECES
+    {  46,    39,    24,   -24,     0                      }, // Rook
+    {   0,     0,     0,     0,     0,     0               }, // Hawk
+    {   0,     0,     0,     0,     0,     0,     0        }, // Elephant
+    { 101,   100,   -37,   141,   268,     0,     0,     0 }  // Queen
   };
 
   // QueenMinorsImbalance[opp_minor_count] is applied when only one side has a queen.
@@ -100,9 +99,9 @@ namespace {
 
     const Color Them = (Us == WHITE ? BLACK : WHITE);
 
-    int bonus = PawnSet[pieceCount[Us][PAWN]];
+    int bonus = 0;
 
-    // Second-degree polynomial material imbalance by Tord Romstad
+    // Second-degree polynomial material imbalance, by Tord Romstad
     for (int pt1 = NO_PIECE_TYPE; pt1 <= QUEEN; ++pt1)
     {
         if (!pieceCount[Us][pt1])
@@ -231,10 +230,14 @@ Entry* probe(const Position& pos) {
   // for the bishop pair "extended piece", which allows us to be more flexible
   // in defining bishop pair bonuses.
   const int PieceCount[COLOR_NB][PIECE_TYPE_NB] = {
-  { pos.count<BISHOP>(WHITE) > 1, pos.count<PAWN>(WHITE), pos.count<KNIGHT>(WHITE),
-    pos.count<BISHOP>(WHITE)    , pos.count<ROOK>(WHITE), pos.count<QUEEN >(WHITE) },
-  { pos.count<BISHOP>(BLACK) > 1, pos.count<PAWN>(BLACK), pos.count<KNIGHT>(BLACK),
-    pos.count<BISHOP>(BLACK)    , pos.count<ROOK>(BLACK), pos.count<QUEEN >(BLACK) } };
+  { pos.count<BISHOP>(WHITE) > 1, pos.count<PAWN>(WHITE),
+    pos.count<KNIGHT>(WHITE)    , pos.count<BISHOP>(WHITE),
+    pos.count<ROOK>(WHITE)      , pos.count<HAWK>(WHITE),
+    pos.count<ELEPHANT>(WHITE)  , pos.count<QUEEN>(WHITE) },
+  { pos.count<BISHOP>(BLACK) > 1, pos.count<PAWN>(BLACK),
+    pos.count<KNIGHT>(BLACK)    , pos.count<BISHOP>(BLACK),
+    pos.count<ROOK>(BLACK)      , pos.count<HAWK>(BLACK),
+    pos.count<ELEPHANT>(BLACK)  , pos.count<QUEEN>(BLACK) } };
 
   e->value = int16_t((imbalance<WHITE>(PieceCount) - imbalance<BLACK>(PieceCount)) / 16);
   return e;
