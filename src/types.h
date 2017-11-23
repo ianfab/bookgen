@@ -157,8 +157,14 @@ enum Variant {
 #ifdef BUGHOUSE
   BUGHOUSE_VARIANT,
 #endif
+#ifdef DISPLACEDGRID
+  DISPLACEDGRID_VARIANT,
+#endif
 #ifdef LOOP
   LOOP_VARIANT,
+#endif
+#ifdef SLIPPEDGRID
+  SLIPPEDGRID_VARIANT,
 #endif
 #ifdef TWOKINGSSYMMETRIC
   TWOKINGSSYMMETRIC_VARIANT,
@@ -213,8 +219,14 @@ static std::vector<std::string> variants = {
 #ifdef BUGHOUSE
 "bughouse",
 #endif
+#ifdef DISPLACEDGRID
+"displacedgrid",
+#endif
 #ifdef LOOP
 "loop",
+#endif
+#ifdef SLIPPEDGRID
+"slippedgrid",
 #endif
 #ifdef TWOKINGSSYMMETRIC
 "twokingssymmetric",
@@ -279,6 +291,19 @@ template<Color C, CastlingSide S> struct MakeCastling {
                      : S == QUEEN_SIDE ? BLACK_OOO : BLACK_OO;
 };
 
+#ifdef GRID
+enum GridLayout {
+  NORMAL_GRID,
+#ifdef DISPLACEDGRID
+  DISPLACED_GRID,
+#endif
+#ifdef SLIPPEDGRID
+  SLIPPED_GRID,
+#endif
+  GRIDLAYOUT_NB
+};
+#endif
+
 #ifdef THREECHECK
 enum CheckCount : int {
   CHECKS_0 = 0, CHECKS_1 = 1, CHECKS_2 = 2, CHECKS_3 = 3, CHECKS_NB = 4
@@ -331,11 +356,11 @@ enum Value : int {
   KingValueMgAnti   = -23,   KingValueEgAnti   = 173,
 #endif
 #ifdef ATOMIC
-  PawnValueMgAtomic   = 296,   PawnValueEgAtomic   = 402,
-  KnightValueMgAtomic = 426,   KnightValueEgAtomic = 691,
-  BishopValueMgAtomic = 581,   BishopValueEgAtomic = 756,
-  RookValueMgAtomic   = 838,   RookValueEgAtomic   = 1103,
-  QueenValueMgAtomic  = 1545,  QueenValueEgAtomic  = 2033,
+  PawnValueMgAtomic   = 244,   PawnValueEgAtomic   = 367,
+  KnightValueMgAtomic = 437,   KnightValueEgAtomic = 652,
+  BishopValueMgAtomic = 552,   BishopValueEgAtomic = 716,
+  RookValueMgAtomic   = 787,   RookValueEgAtomic   = 1074,
+  QueenValueMgAtomic  = 1447,  QueenValueEgAtomic  = 1892,
 #endif
 #ifdef CRAZYHOUSE
   PawnValueMgHouse   = 140,   PawnValueEgHouse   = 232,
@@ -353,11 +378,11 @@ enum Value : int {
   KingValueMgExtinction   = 919,   KingValueEgExtinction   = 1093,
 #endif
 #ifdef GRID
-  PawnValueMgGrid   = 51,    PawnValueEgGrid   = 72,
-  KnightValueMgGrid = 982,   KnightValueEgGrid = 900,
-  BishopValueMgGrid = 690,   BishopValueEgGrid = 781,
-  RookValueMgGrid   = 1018,  RookValueEgGrid   = 1094,
-  QueenValueMgGrid  = 2568,  QueenValueEgGrid  = 2354,
+  PawnValueMgGrid   = 38,    PawnValueEgGrid   = 55,
+  KnightValueMgGrid = 993,   KnightValueEgGrid = 903,
+  BishopValueMgGrid = 685,   BishopValueEgGrid = 750,
+  RookValueMgGrid   = 1018,  RookValueEgGrid   = 1055,
+  QueenValueMgGrid  = 2556,  QueenValueEgGrid  = 2364,
 #endif
 #ifdef HORDE
   PawnValueMgHorde   = 321,   PawnValueEgHorde   = 326,
@@ -724,9 +749,17 @@ inline Variant main_variant(Variant v) {
   case BUGHOUSE_VARIANT:
       return CRAZYHOUSE_VARIANT;
 #endif
+#ifdef DISPLACEDGRID
+  case DISPLACEDGRID_VARIANT:
+      return GRID_VARIANT;
+#endif
 #ifdef LOOP
   case LOOP_VARIANT:
       return CRAZYHOUSE_VARIANT;
+#endif
+#ifdef SLIPPEDGRID
+  case SLIPPEDGRID_VARIANT:
+      return GRID_VARIANT;
 #endif
 #ifdef TWOKINGSSYMMETRIC
   case TWOKINGSSYMMETRIC_VARIANT:

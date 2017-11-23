@@ -119,6 +119,9 @@ public:
   Square castling_rook_square(CastlingRight cr) const;
 
   // Checking
+#ifdef ATOMIC
+  bool kings_adjacent() const;
+#endif
   Bitboard checkers() const;
   Bitboard discovered_check_candidates() const;
   Bitboard pinned_pieces(Color c) const;
@@ -127,6 +130,10 @@ public:
   // Attacks to/from a given square
   Bitboard attackers_to(Square s) const;
   Bitboard attackers_to(Square s, Bitboard occupied) const;
+#ifdef ATOMIC
+  Bitboard slider_attackers_to(Square s) const;
+  Bitboard slider_attackers_to(Square s, Bitboard occupied) const;
+#endif
   Bitboard attacks_from(PieceType pt, Square s) const;
   template<PieceType> Bitboard attacks_from(Square s) const;
   template<PieceType> Bitboard attacks_from(Square s, Color c) const;
@@ -209,6 +216,14 @@ public:
 #endif
 #ifdef GRID
   bool is_grid() const;
+  GridLayout grid_layout() const;
+  Bitboard grid_bb(Square s) const;
+#endif
+#ifdef DISPLACEDGRID
+  bool is_displaced_grid() const;
+#endif
+#ifdef SLIPPEDGRID
+  bool is_slipped_grid() const;
 #endif
 #ifdef KOTH
   bool is_koth() const;
@@ -512,6 +527,16 @@ inline Bitboard Position::attackers_to(Square s) const {
   return attackers_to(s, byTypeBB[ALL_PIECES]);
 }
 
+#ifdef ATOMIC
+inline Bitboard Position::slider_attackers_to(Square s) const {
+  return slider_attackers_to(s, byTypeBB[ALL_PIECES]);
+}
+
+inline bool Position::kings_adjacent() const {
+  return attacks_from<KING>(square<KING>(~sideToMove)) & pieces(sideToMove, KING);
+}
+#endif
+
 inline Bitboard Position::checkers() const {
   return st->checkersBB;
 }
@@ -618,6 +643,42 @@ inline bool Position::is_extinction_loss() const {
 #ifdef GRID
 inline bool Position::is_grid() const {
   return var == GRID_VARIANT;
+}
+
+inline GridLayout Position::grid_layout() const {
+  assert(var == GRID_VARIANT);
+  switch (subvar)
+  {
+  case GRID_VARIANT:
+      return NORMAL_GRID;
+#ifdef DISPLACEDGRID
+  case DISPLACEDGRID_VARIANT:
+      return DISPLACED_GRID;
+#endif
+#ifdef SLIPPEDGRID
+  case SLIPPEDGRID_VARIANT:
+      return SLIPPED_GRID;
+#endif
+  default:
+      assert(false);
+      return NORMAL_GRID;
+  }
+}
+
+inline Bitboard Position::grid_bb(Square s) const {
+  return grid_layout_bb(grid_layout(), s);
+}
+#endif
+
+#ifdef DISPLACEDGRID
+inline bool Position::is_displaced_grid() const {
+  return subvar == DISPLACEDGRID_VARIANT;
+}
+#endif
+
+#ifdef SLIPPEDGRID
+inline bool Position::is_slipped_grid() const {
+  return subvar == SLIPPEDGRID_VARIANT;
 }
 #endif
 
