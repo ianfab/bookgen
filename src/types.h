@@ -108,8 +108,7 @@ const int MAX_PLY   = 128;
 /// bit  0- 5: destination square (from 0 to 63)
 /// bit  6-11: origin square (from 0 to 63)
 /// bit 12-13: promotion piece type - 2 (from KNIGHT-2 to QUEEN-2)
-/// bit 14-15: special move flag: promotion (1), en passant (2), castling (3)
-/// NOTE: EN-PASSANT bit is set only when a pawn can be captured
+/// bit 14-15: special move flag: promotion (1)
 ///
 /// Special cases are MOVE_NONE and MOVE_NULL. We can sneak these in because in
 /// any normal move destination square is always different from origin square
@@ -122,33 +121,11 @@ enum Move : int {
 
 enum MoveType {
   NORMAL,
-  PROMOTION = 1 << 14,
-  ENPASSANT = 2 << 14,
-  CASTLING  = 3 << 14
+  PROMOTION = 1 << 14
 };
 
 enum Color {
   WHITE, BLACK, COLOR_NB = 2
-};
-
-enum CastlingSide {
-  KING_SIDE, QUEEN_SIDE, CASTLING_SIDE_NB = 2
-};
-
-enum CastlingRight {
-  NO_CASTLING,
-  WHITE_OO,
-  WHITE_OOO = WHITE_OO << 1,
-  BLACK_OO  = WHITE_OO << 2,
-  BLACK_OOO = WHITE_OO << 3,
-  ANY_CASTLING = WHITE_OO | WHITE_OOO | BLACK_OO | BLACK_OOO,
-  CASTLING_RIGHT_NB = 16
-};
-
-template<Color C, CastlingSide S> struct MakeCastling {
-  static const CastlingRight
-  right = C == WHITE ? S == QUEEN_SIDE ? WHITE_OOO : WHITE_OO
-                     : S == QUEEN_SIDE ? BLACK_OOO : BLACK_OO;
 };
 
 enum Phase {
@@ -185,9 +162,9 @@ enum Value : int {
 
   PawnValueMg   = 171,   PawnValueEg   = 240,
   KnightValueMg = 764,   KnightValueEg = 848,
-  BishopValueMg = 826,   BishopValueEg = 891,
+  BishopValueMg = 326,   BishopValueEg = 391,
   RookValueMg   = 1282,  RookValueEg   = 1373,
-  QueenValueMg  = 2526,  QueenValueEg  = 2646,
+  QueenValueMg  = 426,   QueenValueEg  = 446,
 
   MidgameLimit  = 15258, EndgameLimit  = 3915
 };
@@ -349,10 +326,6 @@ inline Square operator~(Square s) {
 
 inline Piece operator~(Piece pc) {
   return Piece(pc ^ 8); // Swap color of piece B_KNIGHT -> W_KNIGHT
-}
-
-inline CastlingRight operator|(Color c, CastlingSide s) {
-  return CastlingRight(WHITE_OO << ((s == QUEEN_SIDE) + 2 * c));
 }
 
 inline Value mate_in(int ply) {

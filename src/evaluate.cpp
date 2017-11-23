@@ -306,9 +306,8 @@ namespace {
     while ((s = *pl++) != SQ_NONE)
     {
         // Find attacked squares, including x-ray attacks for bishops and rooks
-        b = Pt == BISHOP ? attacks_bb<BISHOP>(s, pos.pieces() ^ pos.pieces(Us, QUEEN))
-          : Pt ==   ROOK ? attacks_bb<  ROOK>(s, pos.pieces() ^ pos.pieces(Us, ROOK, QUEEN))
-                         : pos.attacks_from<Pt>(s);
+        b = Pt == ROOK ? attacks_bb<ROOK>(s, pos.pieces() ^ pos.pieces(Us, ROOK))
+                       : pos.attacks_from<Pt>(s);
 
         if (pos.pinned_pieces(Us) & s)
             b &= LineBB[pos.square<KING>(Us)][s];
@@ -352,10 +351,6 @@ namespace {
             {
                 // Penalty for pawns on the same color square as the bishop
                 score -= BishopPawns * pe->pawns_on_same_color_squares(Us, s);
-
-                // Bonus for bishop on a long diagonal which can "see" both center squares
-                if (more_than_one(Center & (attacks_bb<BISHOP>(s, pos.pieces(PAWN)) | s)))
-                    score += LongRangedBishop;
             }
 
             // An important Chess960 pattern: A cornered bishop blocked by a friendly
@@ -383,14 +378,14 @@ namespace {
             if (pe->semiopen_file(Us, file_of(s)))
                 score += RookOnFile[!!pe->semiopen_file(Them, file_of(s))];
 
-            // Penalty when trapped by the king, even more if the king cannot castle
+            // Penalty when trapped by the king
             else if (mob <= 3)
             {
                 Square ksq = pos.square<KING>(Us);
 
                 if (   ((file_of(ksq) < FILE_E) == (file_of(s) < file_of(ksq)))
                     && !pe->semiopen_side(Us, file_of(ksq), file_of(s) < file_of(ksq)))
-                    score -= (TrappedRook - make_score(mob * 22, 0)) * (1 + !pos.can_castle(Us));
+                    score -= (TrappedRook - make_score(mob * 22, 0)) * 2;
             }
         }
 

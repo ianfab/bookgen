@@ -42,7 +42,7 @@ extern vector<string> setup_bench(const Position&, istream&);
 namespace {
 
   // FEN string of the initial position, normal chess
-  const char* StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  const char* StartFEN = "rnbkqbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBKQBNR w 0 1";
 
 
   // position() is called when engine receives the "position" UCI command.
@@ -453,11 +453,8 @@ std::string UCI::square(Square s) {
 
 
 /// UCI::move() converts a Move to a string in coordinate notation (g1f3, a7a8q).
-/// The only special case is castling, where we print in the e1g1 notation in
-/// normal chess mode, and in e1h1 notation in chess960 mode. Internally all
-/// castling moves are always encoded as 'king captures rook'.
 
-string UCI::move(Move m, bool chess960) {
+string UCI::move(Move m) {
 
   Square from = from_sq(m);
   Square to = to_sq(m);
@@ -467,9 +464,6 @@ string UCI::move(Move m, bool chess960) {
 
   if (m == MOVE_NULL)
       return "0000";
-
-  if (type_of(m) == CASTLING && !chess960)
-      to = make_square(to > from ? FILE_G : FILE_C, rank_of(from));
 
   string move = UCI::square(from) + UCI::square(to);
 
@@ -489,7 +483,7 @@ Move UCI::to_move(const Position& pos, string& str) {
       str[4] = char(tolower(str[4]));
 
   for (const auto& m : MoveList<LEGAL>(pos))
-      if (str == UCI::move(m, pos.is_chess960()))
+      if (str == UCI::move(m))
           return m;
 
   return MOVE_NONE;

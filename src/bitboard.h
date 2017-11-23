@@ -242,7 +242,7 @@ template<> inline int distance<Rank>(Square x, Square y) { return distance(rank_
 template<PieceType Pt>
 inline Bitboard attacks_bb(Square s, Bitboard occupied) {
 
-  const Magic& m = Pt == ROOK ? RookMagics[s] : BishopMagics[s];
+  const Magic& m = RookMagics[s];
   return m.attacks[m.index(occupied)];
 }
 
@@ -252,9 +252,7 @@ inline Bitboard attacks_bb(PieceType pt, Square s, Bitboard occupied) {
 
   switch (pt)
   {
-  case BISHOP: return attacks_bb<BISHOP>(s, occupied);
   case ROOK  : return attacks_bb<  ROOK>(s, occupied);
-  case QUEEN : return attacks_bb<BISHOP>(s, occupied) | attacks_bb<ROOK>(s, occupied);
   default    : return PseudoAttacks[pt][s];
   }
 }

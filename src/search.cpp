@@ -172,7 +172,7 @@ namespace {
             pos.undo_move(m);
         }
         if (Root)
-            sync_cout << UCI::move(m, pos.is_chess960()) << ": " << cnt << sync_endl;
+            sync_cout << UCI::move(m) << ": " << cnt << sync_endl;
     }
     return nodes;
   }
@@ -247,7 +247,7 @@ void MainThread::search() {
   {
       rootMoves.emplace_back(MOVE_NONE);
       sync_cout << "info depth 0 score "
-                << UCI::value(rootPos.checkers() ? -VALUE_MATE : VALUE_DRAW)
+                << UCI::value(-VALUE_MATE)
                 << sync_endl;
   }
   else
@@ -309,10 +309,10 @@ void MainThread::search() {
   if (bestThread != this)
       sync_cout << UCI::pv(bestThread->rootPos, bestThread->completedDepth, -VALUE_INFINITE, VALUE_INFINITE) << sync_endl;
 
-  sync_cout << "bestmove " << UCI::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
+  sync_cout << "bestmove " << UCI::move(bestThread->rootMoves[0].pv[0]);
 
   if (bestThread->rootMoves[0].pv.size() > 1 || bestThread->rootMoves[0].extract_ponder_from_tt(rootPos))
-      std::cout << " ponder " << UCI::move(bestThread->rootMoves[0].pv[1], rootPos.is_chess960());
+      std::cout << " ponder " << UCI::move(bestThread->rootMoves[0].pv[1]);
 
   std::cout << sync_endl;
 }
@@ -643,8 +643,7 @@ namespace {
 
         if (    piecesCount <= TB::Cardinality
             && (piecesCount <  TB::Cardinality || depth >= TB::ProbeDepth)
-            &&  pos.rule50_count() == 0
-            && !pos.can_castle(ANY_CASTLING))
+            &&  pos.rule50_count() == 0)
         {
             TB::ProbeState err;
             TB::WDLScore v = Tablebases::probe_wdl(pos, &err);
@@ -841,7 +840,7 @@ moves_loop: // When in check search starts from here
 
       if (rootNode && thisThread == Threads.main() && Time.elapsed() > 3000)
           sync_cout << "info depth " << depth / ONE_PLY
-                    << " currmove " << UCI::move(move, pos.is_chess960())
+                    << " currmove " << UCI::move(move)
                     << " currmovenumber " << moveCount + thisThread->PVIdx << sync_endl;
 
       if (PvNode)
@@ -976,11 +975,8 @@ moves_loop: // When in check search starts from here
               if (cutNode)
                   r += 2 * ONE_PLY;
 
-              // Decrease reduction for moves that escape a capture. Filter out
-              // castling moves, because they are coded as "king captures rook" and
-              // hence break make_move().
-              else if (    type_of(move) == NORMAL
-                       && !pos.see_ge(make_move(to_sq(move), from_sq(move))))
+              // Decrease reduction for moves that escape a capture.
+              else if (!pos.see_ge(make_move(to_sq(move), from_sq(move))))
                   r -= 2 * ONE_PLY;
 
               ss->statScore =  thisThread->mainHistory[~pos.side_to_move()][from_to(move)]
@@ -1114,7 +1110,7 @@ moves_loop: // When in check search starts from here
 
     if (!moveCount)
         bestValue = excludedMove ? alpha
-                   :     inCheck ? mated_in(ss->ply) : DrawValue[pos.side_to_move()];
+                   : mated_in(ss->ply);
     else if (bestMove)
     {
         // Quiet best move: update move sorting heuristics
@@ -1267,8 +1263,6 @@ moves_loop: // When in check search starts from here
           &&  futilityBase > -VALUE_KNOWN_WIN
           && !pos.advanced_pawn_push(move))
       {
-          assert(type_of(move) != ENPASSANT); // Due to !pos.advanced_pawn_push
-
           futilityValue = futilityBase + PieceValue[EG][pos.piece_on(to_sq(move))];
 
           if (futilityValue <= alpha)
@@ -1570,7 +1564,7 @@ string UCI::pv(const Position& pos, Depth depth, Value alpha, Value beta) {
          << " pv";
 
       for (Move m : rootMoves[i].pv)
-          ss << " " << UCI::move(m, pos.is_chess960());
+          ss << " " << UCI::move(m);
   }
 
   return ss.str();
@@ -1624,7 +1618,7 @@ void Tablebases::filter_root_moves(Position& pos, Search::RootMoves& rootMoves) 
         ProbeDepth = DEPTH_ZERO;
     }
 
-    if (Cardinality < popcount(pos.pieces()) || pos.can_castle(ANY_CASTLING))
+    if (Cardinality < popcount(pos.pieces()))
         return;
 
     // If the current root position is in the tablebases, then RootMoves

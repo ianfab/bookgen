@@ -52,7 +52,6 @@ namespace {
   int MSBTable[256];            // To implement software msb()
   Square BSFTable[SQUARE_NB];   // To implement software bitscan
   Bitboard RookTable[0x19000];  // To store rook attacks
-  Bitboard BishopTable[0x1480]; // To store bishop attacks
 
   void init_magics(Bitboard table[], Magic magics[], Square deltas[]);
 
@@ -181,10 +180,10 @@ void Bitboards::init() {
               DistanceRingBB[s1][SquareDistance[s1][s2] - 1] |= s2;
           }
 
-  int steps[][5] = { {}, { 7, 9 }, { 6, 10, 15, 17 }, {}, {}, {}, { 1, 7, 8, 9 } };
+  int steps[][5] = { {}, { 7, 9 }, { 6, 10, 15, 17 }, {14, 18}, {}, {7, 9}, { 1, 7, 8, 9 } };
 
   for (Color c = WHITE; c <= BLACK; ++c)
-      for (PieceType pt : { PAWN, KNIGHT, KING })
+      for (PieceType pt : { PAWN, KNIGHT, BISHOP, QUEEN, KING })
           for (Square s = SQ_A1; s <= SQ_H8; ++s)
               for (int i = 0; steps[pt][i]; ++i)
               {
@@ -200,17 +199,14 @@ void Bitboards::init() {
               }
 
   Square RookDeltas[] = { NORTH,  EAST,  SOUTH,  WEST };
-  Square BishopDeltas[] = { NORTH_EAST, SOUTH_EAST, SOUTH_WEST, NORTH_WEST };
 
   init_magics(RookTable, RookMagics, RookDeltas);
-  init_magics(BishopTable, BishopMagics, BishopDeltas);
 
   for (Square s1 = SQ_A1; s1 <= SQ_H8; ++s1)
   {
-      PseudoAttacks[QUEEN][s1]  = PseudoAttacks[BISHOP][s1] = attacks_bb<BISHOP>(s1, 0);
-      PseudoAttacks[QUEEN][s1] |= PseudoAttacks[  ROOK][s1] = attacks_bb<  ROOK>(s1, 0);
+      PseudoAttacks[ROOK][s1] = attacks_bb<  ROOK>(s1, 0);
 
-      for (PieceType pt : { BISHOP, ROOK })
+      for (PieceType pt : { ROOK })
           for (Square s2 = SQ_A1; s2 <= SQ_H8; ++s2)
           {
               if (!(PseudoAttacks[pt][s1] & s2))

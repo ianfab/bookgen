@@ -55,7 +55,7 @@ struct Entry {
 
   template<Color Us>
   Score king_safety(const Position& pos, Square ksq) {
-    return  kingSquares[Us] == ksq && castlingRights[Us] == pos.can_castle(Us)
+    return  kingSquares[Us] == ksq
           ? kingSafety[Us] : (kingSafety[Us] = do_king_safety<Us>(pos, ksq));
   }
 
@@ -73,7 +73,6 @@ struct Entry {
   Square kingSquares[COLOR_NB];
   Score kingSafety[COLOR_NB];
   int weakUnopposed[COLOR_NB];
-  int castlingRights[COLOR_NB];
   int semiopenFiles[COLOR_NB];
   int pawnsOnSquares[COLOR_NB][COLOR_NB]; // [color][light/dark squares]
   int asymmetry;
