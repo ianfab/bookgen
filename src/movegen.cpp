@@ -2,7 +2,7 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
   Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
-  Copyright (C) 2015-2017 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
+  Copyright (C) 2015-2018 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -54,8 +54,8 @@ namespace {
 
     assert(!pos.checkers());
 
-    const Square K = Chess960 ? kto > kfrom ? WEST : EAST
-                              : KingSide    ? WEST : EAST;
+    const Direction K = Chess960 ? kto > kfrom ? WEST : EAST
+                                 : KingSide    ? WEST : EAST;
 
 #ifdef ANTI
     if (V != ANTI_VARIANT)
@@ -105,7 +105,7 @@ namespace {
   }
 
 
-  template<Variant V, GenType Type, Square D>
+  template<Variant V, GenType Type, Direction D>
   ExtMove* make_promotions(ExtMove* moveList, Square to, Square ksq) {
 
 #ifdef ANTI
@@ -118,6 +118,19 @@ namespace {
             *moveList++ = make<PROMOTION>(to - D, to, BISHOP);
             *moveList++ = make<PROMOTION>(to - D, to, KNIGHT);
             *moveList++ = make<PROMOTION>(to - D, to, KING);
+        }
+        return moveList;
+    }
+#endif
+#ifdef LOSERS
+    if (V == LOSERS_VARIANT)
+    {
+        if (Type == QUIETS || Type == CAPTURES || Type == NON_EVASIONS)
+        {
+            *moveList++ = make<PROMOTION>(to - D, to, QUEEN);
+            *moveList++ = make<PROMOTION>(to - D, to, ROOK);
+            *moveList++ = make<PROMOTION>(to - D, to, BISHOP);
+            *moveList++ = make<PROMOTION>(to - D, to, KNIGHT);
         }
         return moveList;
     }
@@ -166,16 +179,16 @@ namespace {
 
     // Compute our parametrized parameters at compile time, named according to
     // the point of view of white side.
-    const Color    Them     = (Us == WHITE ? BLACK      : WHITE);
-    const Bitboard TRank8BB = (Us == WHITE ? Rank8BB    : Rank1BB);
-    const Bitboard TRank7BB = (Us == WHITE ? Rank7BB    : Rank2BB);
+    const Color     Them     = (Us == WHITE ? BLACK      : WHITE);
+    const Bitboard  TRank8BB = (Us == WHITE ? Rank8BB    : Rank1BB);
+    const Bitboard  TRank7BB = (Us == WHITE ? Rank7BB    : Rank2BB);
 #ifdef HORDE
-    const Bitboard TRank2BB = (Us == WHITE ? Rank2BB    : Rank7BB);
+    const Bitboard  TRank2BB = (Us == WHITE ? Rank2BB    : Rank7BB);
 #endif
-    const Bitboard TRank3BB = (Us == WHITE ? Rank3BB    : Rank6BB);
-    const Square   Up       = (Us == WHITE ? NORTH      : SOUTH);
-    const Square   Right    = (Us == WHITE ? NORTH_EAST : SOUTH_WEST);
-    const Square   Left     = (Us == WHITE ? NORTH_WEST : SOUTH_EAST);
+    const Bitboard  TRank3BB = (Us == WHITE ? Rank3BB    : Rank6BB);
+    const Direction Up       = (Us == WHITE ? NORTH      : SOUTH);
+    const Direction Right    = (Us == WHITE ? NORTH_EAST : SOUTH_WEST);
+    const Direction Left     = (Us == WHITE ? NORTH_WEST : SOUTH_EAST);
 
     Bitboard emptySquares;
 
@@ -184,6 +197,10 @@ namespace {
 
     Bitboard enemies = (Type == EVASIONS ? pos.pieces(Them) & target:
                         Type == CAPTURES ? target : pos.pieces(Them));
+#ifdef ATOMIC
+    if (V == ATOMIC_VARIANT)
+        enemies &= (Type == CAPTURES || Type == NON_EVASIONS) ? target : ~pos.attacks_from<KING>(pos.square<KING>(Us));
+#endif
 
     // Single and double pawn pushes, no promotions
     if (Type != CAPTURES)
@@ -530,8 +547,8 @@ ExtMove* generate(const Position& pos, ExtMove* moveList) {
 #ifdef ATOMIC
   if (pos.is_atomic())
   {
-      if (Type == CAPTURES)
-          target &= ~pos.attacks_from<KING>(pos.square<KING>(us));
+      if (Type == CAPTURES || Type == NON_EVASIONS)
+          target &= ~(pos.pieces(~us) & pos.attacks_from<KING>(pos.square<KING>(us)));
       return us == WHITE ? generate_all<ATOMIC_VARIANT, WHITE, Type>(pos, moveList, target)
                          : generate_all<ATOMIC_VARIANT, BLACK, Type>(pos, moveList, target);
   }
@@ -600,6 +617,10 @@ ExtMove* generate<QUIET_CHECKS>(const Position& pos, ExtMove* moveList) {
 #endif
 #ifdef EXTINCTION
   if (pos.is_extinction())
+      return moveList;
+#endif
+#ifdef LOSERS
+  if (pos.is_losers() && pos.can_capture_losers())
       return moveList;
 #endif
 #ifdef RACE

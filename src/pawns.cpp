@@ -2,7 +2,7 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
   Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
-  Copyright (C) 2015-2017 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
+  Copyright (C) 2015-2018 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -219,16 +219,7 @@ namespace {
   },
 #endif
 #ifdef HORDE
-  {
-    { { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) }, // Not On King file
-      { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
-      { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
-      { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) } },
-    { { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) }, // On King file
-      { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
-      { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
-      { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) } }
-  },
+  {},
 #endif
 #ifdef KOTH
   {
@@ -522,10 +513,10 @@ namespace {
   template<Color Us>
   Score evaluate(const Position& pos, Pawns::Entry* e) {
 
-    const Color  Them  = (Us == WHITE ? BLACK      : WHITE);
-    const Square Up    = (Us == WHITE ? NORTH      : SOUTH);
-    const Square Right = (Us == WHITE ? NORTH_EAST : SOUTH_WEST);
-    const Square Left  = (Us == WHITE ? NORTH_WEST : SOUTH_EAST);
+    const Color     Them  = (Us == WHITE ? BLACK      : WHITE);
+    const Direction Up    = (Us == WHITE ? NORTH      : SOUTH);
+    const Direction Right = (Us == WHITE ? NORTH_EAST : SOUTH_WEST);
+    const Direction Left  = (Us == WHITE ? NORTH_WEST : SOUTH_EAST);
 
     Bitboard b, neighbours, stoppers, doubled, supported, phalanx;
     Bitboard lever, leverPush;
@@ -627,7 +618,7 @@ namespace {
         if (pos.is_horde() && relative_rank(Us, s) == 0) {} else
 #endif
         if (supported | phalanx)
-            score += Connected[pos.variant()][opposed][!!phalanx][popcount(supported)][relative_rank(Us, s)];
+            score += Connected[pos.variant()][opposed][bool(phalanx)][popcount(supported)][relative_rank(Us, s)];
 
         else if (!neighbours)
             score -= Isolated[pos.variant()], e->weakUnopposed[Us] += !opposed;
@@ -708,6 +699,11 @@ void init() {
       int v = 17 * support;
       v += (Seed[var][r] + (phalanx ? (Seed[var][r + 1] - Seed[var][r]) / 2 : 0)) >> opposed;
 
+#ifdef HORDE
+      if (var == HORDE_VARIANT)
+          Connected[var][opposed][phalanx][support][r] = make_score(v, v);
+      else
+#endif
       Connected[var][opposed][phalanx][support][r] = make_score(v, v * (r - 2) / 4);
   }
 }
@@ -750,7 +746,7 @@ Value Entry::shelter_storm(const Position& pos, Square ksq) {
   Value safety = MaxSafetyBonus;
   File center = std::max(FILE_B, std::min(FILE_G, file_of(ksq)));
 
-  for (File f = center - File(1); f <= center + File(1); ++f)
+  for (File f = File(center - 1); f <= File(center + 1); ++f)
   {
       b = ourPawns & file_bb(f);
       Rank rkUs = b ? relative_rank(Us, backmost_sq(Us, b)) : RANK_1;
@@ -758,7 +754,7 @@ Value Entry::shelter_storm(const Position& pos, Square ksq) {
       b = theirPawns & file_bb(f);
       Rank rkThem = b ? relative_rank(Us, frontmost_sq(Them, b)) : RANK_1;
 
-      int d = std::min(f, FILE_H - f);
+      int d = std::min(f, ~f);
       safety -=  ShelterWeakness[pos.variant()][f == file_of(ksq)][d][rkUs]
                + StormDanger[pos.variant()]
                  [f == file_of(ksq) && rkThem == relative_rank(Us, ksq) + 1 ? BlockedByKing  :
